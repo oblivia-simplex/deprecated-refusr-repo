@@ -38,10 +38,11 @@ Velocio PLC to get/set values.
 In addition to the free software used to program both the PLC and HMIs, the manufacturer also supplies 11 [[http://velocio.net/tutorials/][tutorials]] to get started with programming their PLCs, 3 [[http://velocio.net/tutorials][tutorials]] to get started with making HMIs (mainly targeted at the HMI hardware that they also sell, [[http://velocio.net/hmi/][Command HMI]]) and 5 [[http://velocio.net/hmi/][tutorials]] that shows how to integrate with different
 motor controls or other equipment like a scale used to weigh things.
 
-* How we'll be using it to generate datasets
+* Using the ACE 11 to generate datasets
 The ACE 11 will be the main generator for datasets for our algorithms to explore through coding several programs programmed in Ladder Logic, Flow Chart and Object Oriented programming in vBuilder and let the algorithms analyze the binaries
 and see if they can recover what symbols are in the binaries. vBuilder has the capability of compiling the code and save it in a binary file instead of directly uploading it to a PLC, which makes it easier for us to get our hands on 
 the binaries to analyze. By knowing what instruction set the MCU runs, we can let the algorithms figure out how the instruction set is used to represent for example a timer or switching an output on/off.
+
 That the THUMB-2 instruction set is a mixed 16/32-bit instruction set means that the state space to cover isn't too large, also the fact that its focus is on code-density and thus only includes a subset of the full ARM instruction set means 
 the state space is even more reduced.
 
@@ -52,6 +53,11 @@ We aim to be able to both dissect the binaries and get a understanding of how th
 what is being executed in terms of symbols. PLC languages are usually fairly bit-oriented and thus can be approached like boolean algebraic equations in most parts. Language features like timers and counters are important for the logic of a 
 program, but don't neccessarily fit well into boolean algebra, which will be a challenge to tackle. 
 
-The generated binaries will also be used to manually reverse engineer the symbol to machine code relation to see if there is anything that can be found regarding relations between type of symbol and the type of instructions used
-by the compiler to execute that symbol. A big difference between the ARM instruction set and the Thumb-2 instruction set is that almost all instructions in Thumb-2 are unconditional and instead Thumb-2 have a special If-Then instruction
-to use to make conditionals. This reduces the complexity of reverse engineering the machine code.
+The generated binaries will also be used to manually reverse engineer the symbol
+to machine code relation to see if there is anything that can be found regarding
+relations between type of symbol and the type of instructions used by the
+compiler to execute that symbol. A big difference between the ARM instruction
+set and the Thumb-2 instruction set is that almost all instructions in Thumb-2
+are unconditional and instead Thumb-2 have a special If-Then instruction to use
+to make conditionals. This reduces the complexity of reverse engineering the
+machine code.
