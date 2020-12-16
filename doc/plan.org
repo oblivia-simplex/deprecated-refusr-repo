@@ -1,0 +1,177 @@
+#+TITLE: Experimental Plan for REFUSR
+#+AUTHOR: Olivia Lucca Fraser and Lejonet
+
+
+* Recovery of Symbolic Mathematics from Code (ReMath)
+  :PROPERTIES:
+  :use-timestamps: t
+  :WORD-COUNT: 14
+  :CREATED:  <2020-12-16 15:24>
+  :HASH:     8e44d0cc0a1e027
+  :MODIFIED: <2020-12-16 15:24>
+  :END:
+
+  
+* General Strategy
+  :PROPERTIES:
+  :WORD-COUNT: 176
+  :CREATED:  <2020-12-16 15:24>
+  :HASH:     3a61cc16a8505275
+  :MODIFIED: <2020-12-16 15:24>
+  :END:
+
+   Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering /functions/, or mathematical expressions, that best fit a set of datapoints. The mechanism that generates those datapoints---the function that we imagine we are approximating when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of symbolic regression.
+
+*** Symbolic Regression
+    :PROPERTIES:
+    :WORD-COUNT: 161
+    :CREATED:  <2020-12-16 15:24>
+    :HASH:     50c4ccf1dd3290
+    :MODIFIED: <2020-12-16 15:24>
+    :END:
+
+    Our methodological starting point will be to build a genetic programming (GP) system for symbolic regression. We will initialize populations of mathematical expressions, and, on a first pass, treat the abstract syntax trees (ASTs) of these expressions as /genotypes/. We will consider this set of genotypes to be embedded in a spatial structure that we will call their "geography"---a device that will help to guide the course of their evolution. We define a set of /genetic operators/ over these genotypes---methods for mutation and sexual recombination (i.e., crossover). We then proceed by iterations: on each turn, a random batch of nearby expressions are to be evaluated for their "fitness"---which here means their relative adequacy to the unknown function, implemented by the target cyberphysical system. The fittest specimens of each batch, or "tournament", are made to reproduce (through sexual recombination and mutation), and the least fit are culled from the population, their places usurped by the tournament-winners' offspring.
+
+    But what do we mean by "adequacy to the unknown function", here? On a first approximation, we will treat a function /f/ merely as a randomly generated set /S/ of input/output pairs: ~{(x, f(x)) | for n random variables x}~. Adequacy, here, is just a matter of curve-fitting, or the reduction of the mean square error (MSE) value of the evaluated expression relative to the datapoints given. 
+
+    Notice that, at this point, we have not yet opened the "black box" function /f/, but have restricted ourselves to a random sample /S/, produced in advance. The production of this dataset is a simple matter, since we have the black-boxed implementation of /f/ already in hand. All we need to do is to generate the random inputs, feed those inputs to /f/, and record the outputs. 
+    
+*** Opening the Black Box
+    :PROPERTIES:
+    :WORD-COUNT: 219
+    :CREATED:  <2020-12-04 13:58>
+    :HASH:     2a9172f18ca40978
+    :MODIFIED: <2020-12-15 14:54>
+    :END:
+
+    To leave the function black-boxed, or, worse, to treat it merely as a static and limited collection of data points, is obviously to leave something on the table. There is no reason, after all, why we /must/ keep the mechanism concealed. Why not open the black box, and avail ourselves of whatever information we can find there, and use it to constrain and guide our symbolic regression?
+
+    It appears that we have at least two, potentially quite rich sources of information to draw on, for this purpose:
+
+    1. the probabilistic _property testing_ of the boolean function, which we are free to probe with whichever inputs we choose
+    2. the _static binary analysis_ of the implementation
+
+    One of our first technical objectives will be to set up a system for performing these queries, and devising a domain specific language for expressing the properties that these techniques allow us to infer. These property expressions can then be used to constrain the evolutionary search for function specifications adequate to the implementation in question. Two strikingly similar techniques have emerged in the recent evolutionary computation literature for using formally expressed properties to guide symbolic regression: /logic-guided genetic algorithms/ (LGGA), and /constraint-driven genetic programming/ (CDGP) [ADD CITATIONS]. 
+
+**** TODO Probabilistic Property Testing
+     :PROPERTIES:
+     :WORD-COUNT: 12
+     :CREATED:  <2020-12-04 13:58>
+     :HASH:     14aa0ef708142d26
+     :MODIFIED: <2020-12-15 18:28>
+     :END:
+
+     Since we have at our disposal not merely a subset of the target function's graph, but the implementation itself, we can employ this implementation as an "oracle" of sorts: we can feed it any input we like and record its output.
+
+     This is all that we need to make use of the technique of /probabilistic property testing/. 
+
+     - cite Rubinfeld, Eric Blais
+     -
+
+       [FILL THIS IN]
+
+
+     There is not, as far as we know, a suitable software library for probabilistic property testing, at present, and so one of our first objectives will be to produce one, which we hope will turn out to be of general interest to the scientific computing community. 
+    
+**** TODO Static Binary Analysis
+     :PROPERTIES:
+     :WORD-COUNT: 12
+     :CREATED:  <2020-12-04 13:58>
+     :HASH:     59b2118a531c6cf
+     :MODIFIED: <2020-12-15 12:52>
+     :END:
+
+
+     
+
+*** TODO Constrained Symbolic Regression (CDGP/LGGA)
+
+
+    
+* The ACE 11, our Cyberphysical Target
+  :PROPERTIES:
+  :WORD-COUNT: 211
+  :CREATED:  <2020-12-16 15:24>
+  :HASH:     3a0a11e5134dcb1a
+  :MODIFIED: <2020-12-16 15:24>
+  :END:
+   
+*** What is the ACE 11?
+    :PROPERTIES:
+    :WORD-COUNT: 193
+    :CREATED:  <2020-12-16 15:24>
+    :HASH:     2fb55be196756474
+    :MODIFIED: <2020-12-16 15:24>
+    :END:
+  The ACE 11 is a small PLC, with 6 digital in/outputs, that runs off either a USB port or a 2-pin 5V power supply. Its 2.5 inches by 2.5 inches by 0.5 inches. It supports Ladder Logic, Flow Chart and Object Oriented programming, and talks Modbus over USB for receiving programs and getting/supplying values to HMIs (Human Machine Interfaces). The digital outputs can handle 3 - 30 VDC, 300 mA and the digital inputs can handle 3 - 30 VDC. The MCU (Microcontroller) in the PLC is a Texas Instrument 32-bit ARM Cortex-M4F, [[https://www.ti.com/product/TM4C1232H6PM][TM4C123H6PM]], which runs at 80MHz. It has 256kB Flash memory, 2 kB EEPROM, 32 kB SRAM and two 12-bit ADC modules. It runs in Thumb-2 mode, which means it has a mixed 16/32-bit instruction set. It also features a 16-bit SIMD vector processing unit, six 32-bit timers (that can be split to 12 16-bit timers) and six 64-bit timers (that can be split to 12 32-bit timers) with real-time clock capability. Alongside that it also has a MPU (Memory Protection Unit) and a single-precision capable FPU (Floating-Point Unit).
+
+** Where is the ACE 11 used?
+   :PROPERTIES:
+   :WORD-COUNT: 252
+   :CREATED:  <2020-12-16 15:24>
+   :HASH:     29c4e744622d8c4b
+   :MODIFIED: <2020-12-16 15:24>
+   :END:
+ Velocio Networks targets the ACE line of PLC devices towards everything from hobbyists and small start-ups to large companies that need a flexible and cost-effective solution to deploy a PLC controlled system. There is also the Branch line of PLCs that Velocio Networks offers, that is designed to make larger PLC systems easier to accomplish, by making the PLCs into a distributed system, with a master-worker relation between a master device and the rest of the PLCs.
+
+ The ACE line of PLCs are specifically made for smaller implementations, where you have a localized process that needs to be controlled by a single PLC that has between 3 - 12 analogue inputs, 3 - 18 digital inputs, 2 - 4 thermal/differential analogue inputs, 3 - 24 digital outputs and 1 - 2 RS232/RS485 connectors. One example is a container company (ColdBox) that makes temperature controlled transport containers, where a ACE PLC was put as the heart of the temperature regulation system. It was responsible both for the actual regulation of the system, but also external communication through a touchscreen and a cellular modem, showing the flexibility of the ACE PLCs.
+
+ Its small device footprint makes it ideal for situations where there isn't that much space in control boxes or in the area of the devices the PLC is going to control. They also offer embedded PLCs, for custom hardware projects where you want to integrate a PLC on a custom PCB.
+
+** How is the ACE 11 programmed
+   :PROPERTIES:
+   :WORD-COUNT: 530
+   :CREATED:  <2020-12-16 15:24>
+   :HASH:     21898ebb100bad99
+   :MODIFIED: <2020-12-16 15:24>
+   :END:
+ The main software used to make the Ladder Logic or Flow Chart programs that is then run on ACE or Branch PLCs is called [[http://velocio.net/vbuilder][vBuilder]] and is provided completely free of charge by Velocio Networks. It has a easy to use interface and a [[http://velocio.net/wp-content/uploads/2016/01/vBuilder-Manual.pdf][good manual]] to get started even for a novice. It comes both as 32 and 64-bit program and is compatible with Windows from Windows Vista up to Windows 10. The manual contains 4 examples, 2 for making a Flow Chart program and 2 for making a Ladder Logic program, amongst the standard manual contents that showcases the interface of vBuilder and how you do different things in the UI. A notable feature for both ACE and Branch PLCs is that they support a more, modern Object Oriented Programming approach, where you can code objects and subroutines to be used. This makes it easier to structure the programs and enables easier code reuse.
+
+ The programs that are built with vBuilder can either be compiled to a file, that you then provision the PLC with through a USB connection, or you integrate the PLC with vBuilder and run the code interactively. With the interactive option, you can single step, debug and get a overview of your program as it is running on the PLC. You can stop the program any time and look at the current memory and IO state. They also offer a software that is called [[http://velocio.net/vfactory][vFactory]], that is aimed towards designing HMIs that visualize the state of the process that the program that is running on a PLC is in. Its a drag-n-drop interface where you choose the type of visualisation you want, drag it to where you want it on a grid and then you configure the properties that it should have, i.e. what tag it should take its data from in the program its monitoring, what colour the control should have and similar properties. For the graph-like visualisations you can also choose boundries of the value its monitoring, to have it show different colours depending on the value. There is also a companion software called [[http://velocio.net/vFactory%20Viewer.exe][vFactory Viewer]] if you're only interested in viewing a HMI that has been built with vFactory instead of both viewing and editing it.
+
+ Besides the manufacturers own software, all of their PLCs are also programmable with the different [[http://velocio.net/indusoft/][InduSoft]] software available from Aveva.
+
+ As the PLCs speak plain Modbus over USB, they can interface with, and be programmed by, any software or hardware that can access a PLC over Modbus over USB. The manufacturer has a [[http://velocio.net/modbus-example/][Modbus example]] that showcases a Visual Studio made form, programmed in C#, that connects to a Velocio PLC to get/set values.
+
+ In addition to the free software used to program both the PLC and HMIs, the manufacturer also supplies 11 [[http://velocio.net/tutorials/][tutorials]] to get started with programming their PLCs, 3 [[http://velocio.net/tutorials][tutorials]] to get started with making HMIs (mainly targeted at the HMI hardware that they also sell, [[http://velocio.net/hmi/][Command HMI]]) and 5 [[http://velocio.net/hmi/][tutorials]] that shows how to integrate with different motor controls or other equipment like a scale used to weigh things.
+
+** Using the ACE 11 to generate datasets
+   :PROPERTIES:
+   :WORD-COUNT: 432
+   :CREATED:  <2020-12-16 15:24>
+   :HASH:     196d8a1736359f9e
+   :MODIFIED: <2020-12-16 15:24>
+   :END:
+ The ACE 11 will be the main generator for datasets for our algorithms to explore through coding several programs programmed in Ladder Logic, Flow Chart and Object Oriented programming in vBuilder and let the algorithms analyze the binaries and see if they can recover what symbols are in the binaries. vBuilder has the capability of compiling the code and save it in a binary file instead of directly uploading it to a PLC, which makes it easier for us to get our hands on the binaries to analyze. By knowing what instruction set the MCU runs, we can let the algorithms figure out how the instruction set is used to represent for example a timer or switching an output on/off.
+
+ That the THUMB-2 instruction set is a mixed 16/32-bit instruction set means that the state space to cover isn't too large, also the fact that its focus is on code-density and thus only includes a subset of the full ARM instruction set means the state space is even more reduced.
+
+ That vBuilder has the ability to output the compiled code into binaries means that we can easily generate a large corpus to feed as data to the algorithm to train it. It also means that we don't need to instrument a USB capturing tool to be able to capture the binary as its sent to the PLC for execution.
+
+ We aim to be able to both dissect the binaries and get a understanding of how the PLC programming language uses the Cortex-M4F to run its programs and be able to analyze the PLC while running the code and see if the algorithms can recover what is being executed in terms of symbols. PLC languages are usually fairly bit-oriented and thus can be approached like boolean algebraic equations in most parts. Language features like timers and counters are important for the logic of a program, but don't neccessarily fit well into boolean algebra, which will be a challenge to tackle.
+
+ The generated binaries will also be used to manually reverse engineer the symbol to machine code relation to see if there is anything that can be found regarding relations between type of symbol and the type of instructions used by the compiler to execute that symbol. A big difference between the ARM instruction set and the Thumb-2 instruction set is that almost all instructions in Thumb-2 are unconditional and instead Thumb-2 have a special If-Then instruction to use to make conditionals. This reduces the complexity of reverse engineering the machine code.
+
+
+* Objectives
+  :PROPERTIES:
+  :WORD-COUNT: 1466
+  :CREATED:  <2020-12-16 15:24>
+  :HASH:     141cff3472bad27c
+  :MODIFIED: <2020-12-16 15:24>
+  :END:
+
+** Software Development
+
+   We have decided to use Julia as our primary development language for this project, owing to its interactive nature, its interoperability with Python and C, its runtime efficiency, its mature scientific computing ecosystem, and its familiarity to our research team.
+
+*** A Probabilistic Property Testing Library
+    
+*** An API for Interacting with the ACE 11
+    
+*** A Tree-based Genetic Programming Library
+    
+*** An Extension of Our GP Library to Support Constraint-Driven GP
+    
+
+  
