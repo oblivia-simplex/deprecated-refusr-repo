@@ -5,33 +5,35 @@
 * Recovery of Symbolic Mathematics from Code (ReMath)
   :PROPERTIES:
   :use-timestamps: t
-  :WORD-COUNT: 14
+  :WORD-COUNT: 18
   :CREATED:  <2020-12-16 15:24>
-  :HASH:     8e44d0cc0a1e027
-  :MODIFIED: <2020-12-16 15:24>
+  :HASH:     12abc2ac97bf6dcd
+  :MODIFIED: <2020-12-17 17:49>
   :END:
 
+  [ BRIEF INTRO ]
   
 * General Strategy
   :PROPERTIES:
-  :WORD-COUNT: 176
+  :WORD-COUNT: 990
   :CREATED:  <2020-12-16 15:24>
-  :HASH:     3a61cc16a8505275
-  :MODIFIED: <2020-12-16 15:24>
+  :HASH:     2853b8cfa793ded4
+  :MODIFIED: <2020-12-17 17:49>
   :END:
 
-   Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering mathematical expressions that optimally fit a set of datapoints. The mechanism that generates those datapoints---the function /f/ that we imagine we are approximating when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of [[symbolic regression][Symbolic Regression]].
-
+   Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering mathematical expressions that optimally fit a set of datapoints. The mechanism that generates those datapoints---the function /f/ that we imagine we are approximating when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of [[Symbolic Regression][symbolic regression]].
+   
     But to leave the function black-boxed, or, worse, to treat it merely as a static and limited collection of datapoints rather than a practically inexhaustible generator of the same, is clearly to leave something on the table. There is no reason, after all, why we /must/ keep the mechanism concealed. Why not open the black box, and avail ourselves of whatever information we can find there, and use it to constrain and guide our symbolic regression? In [[Opening the Black Box]], we will go over the two primary techniques that we will use in order to extract useful information from the target function /f/.
 
    Our primary case study, for this approach, will be the domain of /Boolean functions as implemented on the ACE 11 programmable logic controller/. For a detailed discussion of this device, the reader may consult the section entitled [[The ACE 11, our Cyberphysical Target]].
 
 *** Symbolic Regression
     :PROPERTIES:
-    :WORD-COUNT: 161
+    :WORD-COUNT: 304
     :CREATED:  <2020-12-16 15:24>
-    :HASH:     50c4ccf1dd3290
-    :MODIFIED: <2020-12-16 15:24>
+    :HASH:     74657b0b7db229c
+    :MODIFIED: <2020-12-17 17:49>
+    :CUSTOM-ID: SR
     :END:
 
     Our methodological starting point will be to build a genetic programming (GP) system for symbolic regression. We will initialize populations of mathematical expressions, and, on a first pass, treat the abstract syntax trees (ASTs) of these expressions as /genotypes/. We will consider this set of genotypes to be embedded in a spatial structure that we will call their "geography"---a device that will help to guide the course of their evolution. We define a set of /genetic operators/ over these genotypes---methods for mutation and sexual recombination (i.e., crossover). We then proceed by iterations: on each turn, a random batch of nearby expressions are to be evaluated for their "fitness"---which here means their relative adequacy to the unknown function, implemented by the target cyberphysical system. The fittest specimens of each batch, or "tournament", are made to reproduce (through sexual recombination and mutation), and the least fit are culled from the population, their places usurped by the tournament-winners' offspring.
@@ -39,64 +41,92 @@
     But what do we mean by "adequacy to the unknown function", here? On a first approximation, we will treat a function /f/ merely as a randomly generated set /S/ of input/output pairs: ~{(x, f(x)) | for n random variables x}~. Adequacy, here, is just a matter of curve-fitting, or the reduction of the mean square error (MSE) value of the evaluated expression relative to the datapoints given. 
 
     Notice that, at this point, we have not yet opened the "black box" function /f/, but have restricted ourselves to a random sample /S/, produced in advance. The production of this dataset is a simple matter, since we have the black-boxed implementation of /f/ already in hand. All we need to do is to generate the random inputs, feed those inputs to /f/, and record the outputs. 
-    
+
+**** TODO Refinement #1: Lexicase Selection
+     
+**** TODO Refinement #2: Geographically Distributed Populations
+
+**** TODO Refinement #3: Genomes in Latent Space (GILS)
+     
 *** Opening the Black Box
     :PROPERTIES:
-    :WORD-COUNT: 219
+    :WORD-COUNT: 359
     :CREATED:  <2020-12-04 13:58>
-    :HASH:     2a9172f18ca40978
-    :MODIFIED: <2020-12-15 14:54>
+    :HASH:     1568ad3f03edc7fb
+    :MODIFIED: <2020-12-17 17:49>
     :END:
 
+    The guiding idea, here, is fairly simple: rather than searching for a "silver bullet" capable of solving the mathematical recovery problem in a single stroke, we begin with the modest but well-established technique of recovering unknown functions from input/output samples through symbolic regression, all the while sharpening the focus of our search with successive layers of formal constraints. These constraints can be obtained by "opening the black box", in various ways. At present, it appears that we have at least two, potentially quite rich sources of information to draw on:
 
-    It appears that we have at least two, potentially quite rich sources of information to draw on, for this purpose:
-
-    1. the probabilistic _property testing_ of the boolean function, which we are free to probe with whichever inputs we choose
-    2. the _static binary analysis_ of the implementation
+    1. the probabilistic /property testing/ of the Boolean function, which we are free to probe with whichever inputs we choose
+    2. the /static binary analysis/ of the implementation
 
     One of our first technical objectives will be to set up a system for performing these queries, and devising a domain specific language for expressing the properties that these techniques allow us to infer. These property expressions can then be used to constrain the evolutionary search for function specifications adequate to the implementation in question. Two strikingly similar techniques have emerged in the recent evolutionary computation literature for using formally expressed properties to guide symbolic regression: /logic-guided genetic algorithms/ (LGGA), and /constraint-driven genetic programming/ (CDGP) [ADD CITATIONS]. 
 
 **** TODO Probabilistic Property Testing
      :PROPERTIES:
-     :WORD-COUNT: 12
+     :WORD-COUNT: 128
      :CREATED:  <2020-12-04 13:58>
-     :HASH:     14aa0ef708142d26
-     :MODIFIED: <2020-12-15 18:28>
+     :HASH:     231c9c2da6a13aa6
+     :MODIFIED: <2020-12-17 17:49>
      :END:
 
      Since we have at our disposal not merely a subset of the target function's graph, but the implementation itself, we can employ this implementation as an "oracle" of sorts: we can feed it any input we like and record its output.
 
-     This is all that we need to make use of the technique of /probabilistic property testing/. 
 
      - cite Rubinfeld, Eric Blais
-     -
 
        [FILL THIS IN]
 
 
      There is not, as far as we know, a suitable software library for probabilistic property testing, at present, and so one of our first objectives will be to produce one, which we hope will turn out to be of general interest to the scientific computing community. 
-    
-**** TODO Static Binary Analysis
+     
+**** Static Binary Analysis
      :PROPERTIES:
-     :WORD-COUNT: 12
-     :CREATED:  <2020-12-04 13:58>
-     :HASH:     59b2118a531c6cf
-     :MODIFIED: <2020-12-15 12:52>
+     :WORD-COUNT: 74
+     :CREATED:  <2020-12-17 17:49>
+     :HASH:     1aac0f83a3313f7c
+     :MODIFIED: <2020-12-17 17:49>
      :END:
 
+     A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis. By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/. An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input. 
+
+     The ~angr~ reverse engineering framework, for Python, provides a number of tools for extracting this type of information from a binary file, and supports the ARM Thumb instruction set used by the ACE 11. 
 
      
 
-*** TODO Constrained Symbolic Regression (CDGP/LGGA)
+*** Constrained Symbolic Regression (CDGP/LGGA)
+    :PROPERTIES:
+    :WORD-COUNT: 4
+    :CREATED:  <2020-12-17 17:49>
+    :HASH:     2a145a58b08fbfc8
+    :MODIFIED: <2020-12-17 17:49>
+    :CUSTOM-ID: CDGP
+    :END:
 
+    Błądek and Krawiec work on "Constraint Guided Genetic Programming" (see cite:bladek2019symbolic) and the strikingly similar but seemingly parallel development of "Logic Guided Genetic Algorithms" by Ashok, Scott, Wetzel, Panju, and Ganesh (see cite:ashok2020logic) show us a way of using formally expressed properties to guide and augment the power of symbolic regression. These techniques are independent of the sources by which we come to know those properties, and so are fully compatible with our proposed use of probabilistic property testing and static binary analysis.
 
+    For the time being, let us restrict ourselves to CDGP, and illustrate how it might be applied to our approach as it has been outlined above:
+
+    1. We begin by creating an initial set of tests *T* for this population. These are produced by generating a random set of inputs for /f/ and collecting the outputs.
+    2. We then, through the means described in the above discussions of [[Static Binary Analysis][static binary analysis]] and [[Probabilistic Property Testing][probabilistic property testing]], establish a set of formal properties *C* that /f/ is either certain or highly likely to satisfy. These are then expressed as a set of constraints that any candidate must satisfy if it is to be counted as equivalent to /f/.
+    3. We then generate an initial population of symbolic expressions, *P*, as described in the section on [[Symbolic Regression][symbolic regression]], each of which expresses a Boolean function of /n/ variables.
+    4. Next, we perform a form of lexicase selection cite:helmuth2015 on *P*: we iterate through a (geographically localized) subpopulation *Ṕ* of *P* in random order, and set aside any expressions that either fail to pass some subset of the tests in *T* or else violate a constraint in *C*, until only two members of *Ṕ* remain. These are selected as a mating pair.
+    5. We then enlist an SMT solver (Z3, for instance) to attempt to generate an input that, when passed to our selected candidates, violates one or more of the constraints in *C*. If such an input can be generated, it will be considered a counterexample to our candidate solutions, and will be fed to /f/ in order to generate a new datapoint, which will in turn be appended to *T*.
+    6. If, for some candidate *x*, no such counterexample can be found, and /all/ of the tests in *T* have been passed without any errors, then we are finished: the symbolic expression *x* can be taken as a probable specification for the function implemented in /f/. We then skip ahead to step 9.
+    7. So long as this is not the case, we apply one or more genetic operators (crossover, mutation) to the winning candidates, and insert the resulting offspring into *P*, replacing whichever individuals were first eliminated by the lexicase selection process.
+    8. We then go back to step 4, and repeat the cycle until a perfect solution to every test pair in *T*, and every constraint in *C*, is found.
+    9. Once a solution has been found, we test it against a fresh battery of input/output pairs (datapoints) generated by /f/, to better gauge the accuracy of our search. In any inaccuracies are detected, the discriminating tests are appended to *T*, and we go back to step 4. If not, then we consider the search complete.
+
+  The symbolic expressions discovered in this fashion may still be a few steps away from providing mathematical summaries that would be useful to a human subject matter expert (SME), owing to the peculiarly "hairy" and irregular character of evolved programs. The automatic simplification of symbolic expressions is a well-researched domain, however (cite:bailey2014simp). The simplified symbolic expressions arrived at should be essentially human-readable, and meaningfully interpretable by an SME, and they will be accompanied by a concise statement of the formal constraints *C* that have guided the search, and which the final specimens demonstrably satisfy. 
+    
     
 * The ACE 11, our Cyberphysical Target
   :PROPERTIES:
-  :WORD-COUNT: 211
+  :WORD-COUNT: 1447
   :CREATED:  <2020-12-16 15:24>
-  :HASH:     3a0a11e5134dcb1a
-  :MODIFIED: <2020-12-16 15:24>
+  :HASH:     3a0819e5134dcb1a
+  :MODIFIED: <2020-12-17 17:49>
   :END:
    
 *** What is the ACE 11?
@@ -142,8 +172,8 @@
    :PROPERTIES:
    :WORD-COUNT: 432
    :CREATED:  <2020-12-16 15:24>
-   :HASH:     196d8a1736359f9e
-   :MODIFIED: <2020-12-16 15:24>
+   :HASH:     16d8a1736359f9e9
+   :MODIFIED: <2020-12-17 17:49>
    :END:
  The ACE 11 will be the main generator for datasets for our algorithms to explore through coding several programs programmed in Ladder Logic, Flow Chart and Object Oriented programming in vBuilder and let the algorithms analyze the binaries and see if they can recover what symbols are in the binaries. vBuilder has the capability of compiling the code and save it in a binary file instead of directly uploading it to a PLC, which makes it easier for us to get our hands on the binaries to analyze. By knowing what instruction set the MCU runs, we can let the algorithms figure out how the instruction set is used to represent for example a timer or switching an output on/off.
 
@@ -158,23 +188,27 @@
 
 * Objectives
   :PROPERTIES:
-  :WORD-COUNT: 1466
+  :WORD-COUNT: 140
   :CREATED:  <2020-12-16 15:24>
-  :HASH:     141cff3472bad27c
-  :MODIFIED: <2020-12-16 15:24>
+  :HASH:     1ad93aab4b742247
+  :MODIFIED: <2020-12-17 17:49>
+  :CUSTOM-ID: ACE11
   :END:
 
 ** Software Development
+   :PROPERTIES:
+   :WORD-COUNT: 120
+   :CREATED:  <2020-12-17 17:49>
+   :HASH:     314e6cefd0786468
+   :MODIFIED: <2020-12-17 17:49>
+   :END:
 
    We have decided to use Julia as our primary development language for this project, owing to its interactive nature, its interoperability with Python and C, its runtime efficiency, its mature scientific computing ecosystem, and its familiarity to our research team.
 
-*** A Probabilistic Property Testing Library
-    
-*** An API for Interacting with the ACE 11
-    
-*** A Tree-based Genetic Programming Library
-    
-*** An Extension of Our GP Library to Support Constraint-Driven GP
-    
+   This project will involve the development of the following resources, in the Julia programming language, which we hope to be of general interest to the scientific programming community:
+   
+1. A probabilistic property testing Library
+2. An API for interacting with the ACE 11
+3. A static binary analysis toolbox, providing an ergonomic interface to the Python ~angr~ framework for reverse engineering
+4. A tree-based genetic programming library, with support for[[*Genomes in Latent Space (GILS)][ GILS]] and [[*Constrained Symbolic Regression (CDGP/LGGA)][CDGP]]
 
-  
