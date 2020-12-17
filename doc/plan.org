@@ -1,5 +1,5 @@
 #+TITLE: Experimental Plan for REFUSR
-#+AUTHOR: Olivia Lucca Fraser and Lejonet
+#+AUTHOR: Olivia Lucca Fraser and Daniel Kuehn 
 
 
 * Recovery of Symbolic Mathematics from Code (ReMath)
@@ -20,7 +20,11 @@
   :MODIFIED: <2020-12-16 15:24>
   :END:
 
-   Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering /functions/, or mathematical expressions, that best fit a set of datapoints. The mechanism that generates those datapoints---the function that we imagine we are approximating when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of symbolic regression.
+   Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering mathematical expressions that optimally fit a set of datapoints. The mechanism that generates those datapoints---the function /f/ that we imagine we are approximating when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of [[symbolic regression][Symbolic Regression]].
+
+    But to leave the function black-boxed, or, worse, to treat it merely as a static and limited collection of datapoints rather than a practically inexhaustible generator of the same, is clearly to leave something on the table. There is no reason, after all, why we /must/ keep the mechanism concealed. Why not open the black box, and avail ourselves of whatever information we can find there, and use it to constrain and guide our symbolic regression? In [[Opening the Black Box]], we will go over the two primary techniques that we will use in order to extract useful information from the target function /f/.
+
+   Our primary case study, for this approach, will be the domain of /Boolean functions as implemented on the ACE 11 programmable logic controller/. For a detailed discussion of this device, the reader may consult the section entitled [[The ACE 11, our Cyberphysical Target]].
 
 *** Symbolic Regression
     :PROPERTIES:
@@ -44,7 +48,6 @@
     :MODIFIED: <2020-12-15 14:54>
     :END:
 
-    To leave the function black-boxed, or, worse, to treat it merely as a static and limited collection of data points, is obviously to leave something on the table. There is no reason, after all, why we /must/ keep the mechanism concealed. Why not open the black box, and avail ourselves of whatever information we can find there, and use it to constrain and guide our symbolic regression?
 
     It appears that we have at least two, potentially quite rich sources of information to draw on, for this purpose:
 
