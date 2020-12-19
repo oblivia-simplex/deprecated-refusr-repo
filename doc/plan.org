@@ -1,5 +1,5 @@
 #+TITLE: Experimental Plan for REFUSR
-#+AUTHOR: Olivia Lucca Fraser and Daniel Kuehn 
+#+AUTHOR: Olivia Lucca Fraser and Daniel Kuehn
 
 bibliographystyle:alpha
 bibliography:~/bibliographies/bibtex/bibliography.bib
@@ -15,7 +15,7 @@ bibliography:~/bibliographies/bibtex/bibliography.bib
   :END:
 
   Our contribution to the [[https://beta.sam.gov/opp/667875ba2f464ccfa38688ea1a718fe7/view][ReMath]] research initiative will focus on the recovery of Boolean functions from their implementations in programmable logic controllers, with a particular focus on [[The ACE 11, our Cyberphysical Target][the ACE 11]]. In the following sections, we will discuss our [[General Strategy][general experimental strategy]], [[The ACE 11, our Cyberphysical Target][the cyberphysical target]] we have chosen to focus upon, and our research and development [[Objectives][objectives]].
-  
+
 * General Strategy
   :PROPERTIES:
   :WORD-COUNT: 990
@@ -25,7 +25,7 @@ bibliography:~/bibliographies/bibtex/bibliography.bib
   :END:
 
    Our initial observation is that this problem, in its most general terms, closely resembles that of /symbolic regression/ (SR). Symbolic regression is a generic machine learning technique for discovering mathematical expressions that optimally fit a set of datapoints. It differs from polynomial regression inasmuch as the /form/ of the expression is not given in advance (as an $n^{th}$-degree polynomial, for instance), but emerges through the free recombination and variation of syntactic elements. The mechanism that generates those datapoints---the function /f/ that we aim to approximate when we perform symbolic regression---remains, in this case, a black box. There's no reason why we cannot proceed, on a first pass, in the same fashion when it comes to recovering formally specified functions from their concrete implementations. So long as we indeed possess the implementation, we can execute it so as to generate as many datapoints as we like---and we can do this without "opening the box" and revealing the mechanism itself. Already, we have everything we need in order to tackle the problem as a type of [[Symbolic Regression][symbolic regression]].
-   
+
     But to leave the function black-boxed, or, worse, to treat it merely as a static and limited collection of datapoints rather than a practically inexhaustible generator of the same, is clearly to leave something on the table. There is no reason, after all, why we /must/ keep the mechanism concealed. Why not open the black box, and avail ourselves of whatever information we can find there, and use it to constrain and guide our symbolic regression? In [[Opening the Black Box]], we will go over the two primary techniques that we will use in order to extract useful information from the target function /f/.
 
    Our primary case study, for this approach, will be the domain of /Boolean functions as implemented on the ACE 11 programmable logic controller/. For a detailed discussion of this device, the reader may consult section [[The ACE 11, our Cyberphysical Target]].
@@ -41,13 +41,13 @@ bibliography:~/bibliographies/bibtex/bibliography.bib
 
     Our methodological starting point will be to build a genetic programming (GP) system for symbolic regression. We will initialize populations of mathematical expressions, and, on a first pass, treat the abstract syntax trees (ASTs) of these expressions as /genotypes/. We will consider this set of genotypes to be embedded in a spatial structure that we will call their "geography"---a device that will help to guide the course of their evolution. We define a set of /genetic operators/ over these genotypes---methods for mutation and sexual recombination (i.e., crossover). We then proceed by iterations: on each turn, a random batch of nearby expressions are to be evaluated for their "fitness"---which here means their relative adequacy to the unknown function, implemented by the target cyberphysical system. The fittest specimens of each batch, or "tournament", are made to reproduce (through sexual recombination and mutation), and the least fit are culled from the population, their places usurped by the tournament-winners' offspring.
 
-    But what do we mean by "adequacy to the unknown function", here? On a first approximation, we will treat a function /f/ merely as a randomly generated set /S/ of input/output pairs: ~{(x, f(x)) | for n random variables x}~. Adequacy, here, is just a matter of curve-fitting, or the reduction of the mean square error (MSE) value of the evaluated expression relative to the datapoints given. 
+    But what do we mean by "adequacy to the unknown function", here? On a first approximation, we will treat a function /f/ merely as a randomly generated set /S/ of input/output pairs: ~{(x, f(x)) | for n random variables x}~. Adequacy, here, is just a matter of curve-fitting, or the reduction of the mean square error (MSE) value of the evaluated expression relative to the datapoints given.
 
-    Notice that, at this point, we have not yet opened the "black box" function /f/, but have restricted ourselves to a random sample /S/, produced in advance. The production of this dataset is a simple matter, since we have the black-boxed implementation of /f/ already in hand. All we need to do is to generate the random inputs, feed those inputs to /f/, and record the outputs. 
+    Notice that, at this point, we have not yet opened the "black box" function /f/, but have restricted ourselves to a random sample /S/, produced in advance. The production of this dataset is a simple matter, since we have the black-boxed implementation of /f/ already in hand. All we need to do is to generate the random inputs, feed those inputs to /f/, and record the outputs.
 
 **** Potential Refinement #1: Lexicase Selection
 
-     Here, we are dealing, essentially, with what Lee Spector and Thomas Helmuth have called an "uncompromising problem", 
+     Here, we are dealing, essentially, with what Lee Spector and Thomas Helmuth have called an "uncompromising problem",
 
      #+begin_quote
 a problem for which it is not acceptable for a solution to perform sub-optimally on any one test case in exchange for good performance on others. cite:helmuth2015
@@ -74,7 +74,7 @@ The recovery of /precise/ mathematical specifications for the functions implemen
    and go to Loop.
 #+end_example
 
-This technique can be easily adapted to our problem, as we will illustrate below, in our discussion of [[*Constrained Symbolic Regression (CDGP/LGGA)][constrained symbolic regression.]]     
+This technique can be easily adapted to our problem, as we will illustrate below, in our discussion of [[*Constrained Symbolic Regression (CDGP/LGGA)][constrained symbolic regression.]]
 
 **** Refinement #2: Geographically Distributed Populations
 
@@ -82,13 +82,17 @@ This technique can be easily adapted to our problem, as we will illustrate below
 
      We have found it fruitful to impose two degrees of "geographical" structure on our populations: first, we split the population into a number of "islands", each evolving, more or less independently, on its own processor (see cite:whitley1998island for details). We then set up a means of migration between islands. At some variable frequency, which we may call the ~migration_rate~, two randomly chosen individuals from two different islands may swap places.
 
-     Second, the local population of each island is embedded in an /n/-dimensional torus, where /n/ is adjustable. Tournament competition takes place between neighbours on the torus (the tournament catchment radius can be adjusted, as can the probability of an individual competing in a tournament relative to their proximity to the first challenger). This technique is discussed in some detail in section 10.5 of cite:poli2008fieldguide, and Lee Spector has shown the benefits that can be gained by embedding the population in as "trivial" a geography as a 1-torus (a circular buffer) in cite:spector2006, as compared to tournament selection with no spatial constraints. 
-     
+     Second, the local population of each island is embedded in an /n/-dimensional torus, where /n/ is adjustable. Tournament competition takes place between neighbours on the torus (the tournament catchment radius can be adjusted, as can the probability of an individual competing in a tournament relative to their proximity to the first challenger). This technique is discussed in some detail in section 10.5 of cite:poli2008fieldguide, and Lee Spector has shown the benefits that can be gained by embedding the population in as "trivial" a geography as a 1-torus (a circular buffer) in cite:spector2006, as compared to tournament selection with no spatial constraints.
+
      Where lexicase, rather than tournament, selection is used, geographical proximity to a privileged "challenger" individual can be used to weight the selection of parents from the ~CANDIDATES~ set, in the event that the ~TESTS~ set is depleted. We may also, rather that setting ~CANDIDATES~ to an entire island population, set it to a geographically clustered subpopulation on the island's toroidal surface.
 
-     
-**** TODO Refinement #3: Genomes in Latent Space (GILS)
-     
+
+**** Refinement #3: Genomes in Latent Space (GILS)
+
+One limitation of using a pure genetic programming based approach is that mutation and reproduction, and therefore the search space of the genetic program itself, utilize a notion of  Levenshtein Distance as a proxy for semantic similarity/difference between two genomes. Since this is only sometimes the case for machine instructions, there is a great deal of brute-force effort which could be constrained by more sophisticated notions of distance and a model capable of learning grammar. Intuitively, it is unlikely that this method would increase the overall accuracy - it is likely it will increase sample efficiency dramatically and reduce the number of epochs for convergence.
+
+     To this effect, we propose use the generation of genomes as a way of bootstrapping the aggregation of supervised labeled data for a deep learning Natural Language Processing model with a notion of long-term/short-term memory and a latent space embedding (Machine2Vec) that can serve as either a more robust search space for a “student” genetic program or a downstream solution (in which case the entire architecture becomes on of self-supervision of a language model through the use of genetic programming). Either of these approaches would represent a state of the art hybridization of genetic programming and deep learning.
+
 *** Opening the Black Box
     :PROPERTIES:
     :WORD-COUNT: 359
@@ -102,7 +106,7 @@ This technique can be easily adapted to our problem, as we will illustrate below
     1. the probabilistic /property testing/ of the Boolean function, which we are free to probe with whichever inputs we choose
     2. the /static binary analysis/ of the implementation
 
-    One of our first technical objectives will be to set up a system for performing these queries, and devising a domain specific language for expressing the properties that these techniques allow us to infer. These property expressions can then be used to constrain the evolutionary search for function specifications adequate to the implementation in question. Two strikingly similar techniques have emerged in the recent evolutionary computation literature for using formally expressed properties to guide symbolic regression: /logic-guided genetic algorithms/, or LGGA, as developed by Ashok, Scott, Wetzel, Panju, and Ganesh (cite:ashok2020logic), and /constraint-driven genetic programming/, or CDGP, as developed by Błądek and Krawiec (cite:bladek2019symbolic). 
+    One of our first technical objectives will be to set up a system for performing these queries, and devising a domain specific language for expressing the properties that these techniques allow us to infer. These property expressions can then be used to constrain the evolutionary search for function specifications adequate to the implementation in question. Two strikingly similar techniques have emerged in the recent evolutionary computation literature for using formally expressed properties to guide symbolic regression: /logic-guided genetic algorithms/, or LGGA, as developed by Ashok, Scott, Wetzel, Panju, and Ganesh (cite:ashok2020logic), and /constraint-driven genetic programming/, or CDGP, as developed by Błądek and Krawiec (cite:bladek2019symbolic).
 
 **** TODO Probabilistic Property Testing
      :PROPERTIES:
@@ -120,8 +124,8 @@ This technique can be easily adapted to our problem, as we will illustrate below
        [FILL THIS IN]
 
 
-     There is not, as far as we know, a suitable software library for probabilistic property testing, at present, and so one of our first objectives will be to produce one, which we hope will turn out to be of general interest to the scientific computing community. 
-     
+     There is not, as far as we know, a suitable software library for probabilistic property testing, at present, and so one of our first objectives will be to produce one, which we hope will turn out to be of general interest to the scientific computing community.
+
 **** Static Binary Analysis
      :PROPERTIES:
      :WORD-COUNT: 74
@@ -130,10 +134,10 @@ This technique can be easily adapted to our problem, as we will illustrate below
      :MODIFIED: <2020-12-17 17:49>
      :END:
 
-     A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis. By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/. An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input. 
+     A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis. By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/. An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input.
 
      The ~angr~ reverse engineering framework, for Python, provides a number of tools for extracting this type of information from a binary file, and supports the ARM Thumb instruction set used by the ACE 11. Our task, here, then, is to develop a system for translating structural information obtained through ~angr~'s battery of binary analysis techniques into predicates that can be exploited by our constraint-driven genetic programming algorithm.
-     
+
 
 *** Constrained Symbolic Regression (CDGP/LGGA)
     :PROPERTIES:
@@ -158,9 +162,9 @@ This technique can be easily adapted to our problem, as we will illustrate below
     8. We then go back to step 4, and repeat the cycle until a perfect solution to every test pair in *T*, and every constraint in *C*, is found.
     9. Once a solution has been found, we test it against a fresh battery of input/output pairs (datapoints) generated by /f/, to better gauge the accuracy of our search. In any inaccuracies are detected, the discriminating tests are appended to *T*, and we go back to step 4. If not, then we consider the search complete.
 
-  The symbolic expressions discovered in this fashion may still be a few steps away from providing mathematical summaries that would be useful to a human subject matter expert (SME), owing to the peculiarly "hairy" and irregular character of evolved programs. The automatic simplification of symbolic expressions is a well-researched domain, however (cite:bailey2014simp). The simplified symbolic expressions arrived at should be essentially human-readable, and meaningfully interpretable by an SME, and they will be accompanied by a concise statement of the formal constraints *C* that have guided the search, and which the final specimens demonstrably satisfy. 
-    
-    
+  The symbolic expressions discovered in this fashion may still be a few steps away from providing mathematical summaries that would be useful to a human subject matter expert (SME), owing to the peculiarly "hairy" and irregular character of evolved programs. The automatic simplification of symbolic expressions is a well-researched domain, however (cite:bailey2014simp). The simplified symbolic expressions arrived at should be essentially human-readable, and meaningfully interpretable by an SME, and they will be accompanied by a concise statement of the formal constraints *C* that have guided the search, and which the final specimens demonstrably satisfy.
+
+
 * The ACE 11, our Cyberphysical Target
   :PROPERTIES:
   :WORD-COUNT: 1447
@@ -168,7 +172,7 @@ This technique can be easily adapted to our problem, as we will illustrate below
   :HASH:     3a0819e5134dcb1a
   :MODIFIED: <2020-12-17 17:49>
   :END:
-   
+
 *** What is the ACE 11?
     :PROPERTIES:
     :WORD-COUNT: 193
@@ -246,7 +250,7 @@ This technique can be easily adapted to our problem, as we will illustrate below
    We have decided to use Julia as our primary development language for this project, owing to its interactive nature, its interoperability with Python and C, its runtime efficiency, its mature scientific computing ecosystem, and its familiarity to our research team.
 
    This project will involve the development of the following resources, in the Julia programming language, which we hope to be of general interest to the scientific programming community:
-   
+
 1. A probabilistic property testing Library
 2. An API for interacting with the ACE 11
 3. A static binary analysis toolbox, providing an ergonomic interface to the Python ~angr~ framework for reverse engineering
