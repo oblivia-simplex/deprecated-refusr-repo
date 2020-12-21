@@ -134,7 +134,7 @@ One limitation of using a pure genetic programming based approach is that mutati
      :MODIFIED: <2020-12-17 17:49>
      :END:
 
-     A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis. By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/. An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input.
+     A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis. By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/. An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input. (For a general discussion of these structures and the algorithms by which they may be extracted from a program, see cite:nielson2010ppa.)
 
      The ~angr~ reverse engineering framework, for Python, provides a number of tools for extracting this type of information from a binary file, and supports the ARM Thumb instruction set used by the ACE 11. Our task, here, then, is to develop a system for translating structural information obtained through ~angr~'s battery of binary analysis techniques into predicates that can be exploited by our constraint-driven genetic programming algorithm.
 
