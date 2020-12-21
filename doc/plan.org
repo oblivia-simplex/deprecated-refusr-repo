@@ -121,7 +121,8 @@ One limitation of using a pure genetic programming based approach is that mutati
 
      - cite Rubinfeld, Eric Blais
 
-       [FILL THIS IN]
+ Moreover, it's possible to do better than testing at points by using techniques from the field of ultra-arithmetic (https://doi.org/10.1016/0378-4754(82)90045-3) to probe the function's input/output relationship over dense intervals by using arithmetic models with set semantics for the test values. In brief, ultra-arithmetic represents a function's input-output behavior explicitly with an approximating fuction in a tractable basis such as the Chebyshev, Taylor, or Fourier series, and gives rigorous bounds for the error of the approximation. By iteratively refining the region over which the function's input-output relationship is probed, we can obtain a global model of the function in terms of a standard basis with any desired bound on the error. Such a model can be used directly to approximate the function, or the resulting approximating polynomials can be examined, refactored, or truncated to obtain a succinct algebraic form for the original function.
+ Moreover, such a representation of the function under scrutiny can be used to perform efficient search for global extrema of the value of the function, a common desideratum. See e.g. Verified Global Optimization with Taylor Model-based Range Bounders, K. Makino, M. Berz, Transactions on Computers 11,4 (2005) 1611-1618 https://bt.pa.msu.edu/cgi-bin/display.pl?name=GOM05
 
 
      There is not, as far as we know, a suitable software library for probabilistic property testing, at present, and so one of our first objectives will be to produce one, which we hope will turn out to be of general interest to the scientific computing community.
