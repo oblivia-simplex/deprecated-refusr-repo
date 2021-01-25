@@ -4,6 +4,7 @@
 #+EMAIL: lucca.fraser@special-circumstanc.es
 #+DATE: 2021-01-26
 #+STARTUP: beamer
+#+REVEAL_ROOT: /home/lucca/src/upstream/reveal.js/dist/
 
 
 * Statement of the Problem
