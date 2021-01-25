@@ -137,5 +137,11 @@ Helmuth and Spector have shown that for many such problems, their technique of *
   
 - A wealth of information about the structure of /f/ can be obtained through traditional static binary analysis.
 - By constructing and inspecting the /data-flow graph/ (DFG) for /f/, for instance, we are able to determine which parameters contribute to value of /f/.
-- An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input. 
+- An inspection of /f/'s /control-flow graph/ (CFG) may allow us to assess /f/'s worst-case computational complexity, relative to input.
+
+* Summary
+
+  - Our approach to formula recovery goes from *outside* to *inside*, rather than the reverse.
+  - We begin with a black box, and then progressively constrain the search for symbolic specification by bringing constraints into play.
+  - These constraints may come from heterogeneous sources: probabilistic property testing, static analysis, and perhaps others can be added as we go.
 
