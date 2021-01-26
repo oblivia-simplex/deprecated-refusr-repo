@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Reverse Engineering Functions Using Symbolic Regression (REFUSR)</title>
+<meta name="author" content="Olivia Lucca Fraser (Special Circumstances)"/>
+<style type="text/css">
+.underline { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="/home/lucca/src/upstream/reveal.js/dist/reveal.css"/>
+
+<link rel="stylesheet" href="/home/lucca/src/upstream/reveal.js/dist/theme/black.css" id="theme"/>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section id="sec-title-slide">
+<h1 class="title">Reverse Engineering Functions Using Symbolic Regression (REFUSR)</h1><h2 class="author">Olivia Lucca Fraser (Special Circumstances)</h2><h2 class="date">2021-01-26</h2><p class="date">Created: 2021-01-25 Mon 16:52</p>
+</section>
+<section id="table-of-contents-section">
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#/slide-1">1. Statement of the Problem</a></li>
+<li><a href="#/slide-2">2. Our Strategy</a></li>
+<li><a href="#/slide-3">3. Cyberphysical Target: The ACE 11 PLC</a></li>
+<li><a href="#/slide-4">4. Cyberphysical Target: The ACE 11 PLC</a></li>
+<li><a href="#/slide-5">5. Domain</a></li>
+<li><a href="#/slide-6">6. Boolean Symbolic Expressions as Genotypes</a></li>
+<li><a href="#/slide-7">7. Symbolic Regression through Genetic Programming</a></li>
+<li><a href="#/slide-8">8. An Alternative to Tournament Selection: Lexicase Selection</a></li>
+<li><a href="#/slide-9">9. Lexicase Selection</a></li>
+<li><a href="#/slide-10">10. Opening the Black Box</a></li>
+<li><a href="#/slide-11">11. Constraint-Driven Genetic Programming (CDGP)</a></li>
+<li><a href="#/slide-12">12. Constraint-Driven Genetic Programming (cont.)</a></li>
+<li><a href="#/slide-13">13. Constraint-Driven Genetic Programming (cont.)</a></li>
+<li><a href="#/slide-14">14. Constraint-Driven Genetic Programming (cont.)</a>
+<ul>
+<li><a href="#/slide-14-1">14.1. But where do our constraining properties come from?</a></li>
+</ul>
+</li>
+<li><a href="#/slide-15">15. Probabilistic Property Testing</a></li>
+<li><a href="#/slide-16">16. Static Program Analysis</a></li>
+<li><a href="#/slide-17">17. Summary</a></li>
+</ul>
+</div>
+</div>
+</section>
+
+
+<section>
+<section id="slide-1">
+<h2 id="1"><span class="section-number-2">1</span> Statement of the Problem</h2>
+<p>
+Given a cyberphysical implementation (CPI) of an unknown Boolean function, find a symbolic specification of that function.
+</p>
+
+</section>
+</section>
+<section>
+<section id="slide-2">
+<h2 id="2"><span class="section-number-2">2</span> Our Strategy</h2>
+<ul>
+<li>If we consider the CPI as a <b>black box</b>, then, so long as we can execute the CPI, and generate a set of data points, then this looks like a problem of <b>symbolic regression</b>.</li>
+<li>Even as a black box, it has an advantage over a static set of data points: it can be queried as an oracle. So we can <b>probe</b> it with crafted inputs, so as to better infer its properties (probabilistic property testing).</li>
+<li>But the CPI is <b>not</b> a black box! We can open it up and subject it to static program analysis, inferring a second set of properties.</li>
+<li>We can then <b>use these inferred properties to constrain the symbolic regression</b>. One technique for doing so is known as <b>constraint guided genetic programming</b> (CDGP).</li>
+
+</ul>
+
+
+
+</section>
+</section>
+<section>
+<section id="slide-3">
+<h2 id="3"><span class="section-number-2">3</span> Cyberphysical Target: The ACE 11 PLC</h2>
+
+<div id="org8ab2853" class="figure">
+<p><img src="./img/Ace11.png" alt="Ace11.png" />
+</p>
+</div>
+
+</section>
+</section>
+<section>
+<section id="slide-4">
+<h2 id="4"><span class="section-number-2">4</span> Cyberphysical Target: The ACE 11 PLC</h2>
+<ul>
+<li>Small, inexpensive programmable logic controller</li>
+<li>Programmable by Modbus over USB</li>
+<li>Microcontroller is a TI 32-bit ARM Cortex-M4F (TM4C123H6PM)</li>
+<li>Runs in Thumb-2 mode</li>
+<li>256kB flash memory, 2kB EEPROM, 32kB SRAM</li>
+<li>16-bit SIMD vector processing unit</li>
+<li>multiple timers</li>
+<li>single-precision floating-point unit</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-5">
+<h2 id="5"><span class="section-number-2">5</span> Domain</h2>
+<p>
+In the initial phase of our research, we are restricting our focus to <b>Boolean functions</b>, as implemented on the ACE 11 programmable logic controller.
+</p>
+
+</section>
+</section>
+<section>
+<section id="slide-6">
+<h2 id="6"><span class="section-number-2">6</span> Boolean Symbolic Expressions as Genotypes</h2>
+<p>
+We are searching for human-readable, formal specifications of Boolean functions, in the form of symbolic expression trees.
+</p>
+
+
+<div id="org2aaf222" class="figure">
+<p><img src="./img/boolean_sexp.png" alt="boolean_sexp.png" />
+</p>
+</div>
+
+<p>
+So we initialize a population of random Boolean expressions.
+</p>
+
+</section>
+</section>
+<section>
+<section id="slide-7">
+<h2 id="7"><span class="section-number-2">7</span> Symbolic Regression through Genetic Programming</h2>
+<p>
+Our methodological starting point will be to build a genetic programming (GP) system for symbolic regression.
+</p>
+
+<ul>
+<li>initialize a random population of function specifications (<b>genotypes</b>)</li>
+<li>embed this population in a spatial or &ldquo;<b>geographical</b>&rdquo; structure</li>
+<li>iteratively evaluate random neighbourhoods of genotypes, in <b>tournaments</b></li>
+<li>assign <b>fitness</b> relative to how well a genotype&rsquo;s evaluation fits the available datapoints</li>
+<li>cull the least fit of each batch</li>
+<li>reproduce the most fit, through such <b>genetic operators</b> as crossover and mutation</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-8">
+<h2 id="8"><span class="section-number-2">8</span> An Alternative to Tournament Selection: Lexicase Selection</h2>
+<p>
+Here, we are dealing with what Lee Spector and Thomas Helmuth have called an &ldquo;uncompromising problem&rdquo;,
+</p>
+
+<blockquote>
+<p>
+a problem for which it is not acceptable for a solution to perform sub-optimally on any one test case in exchange for good performance on others.
+</p>
+</blockquote>
+
+<p>
+Helmuth and Spector have shown that for many such problems, their technique of <b>lexicase selection</b> outperforms <b>tournament selection</b>.
+</p>
+
+</section>
+</section>
+<section>
+<section id="slide-9">
+<h2 id="9"><span class="section-number-2">9</span> Lexicase Selection</h2>
+<pre class="example" id="org52de6c4">
+1) Initialize:
+   a) Set CANDIDATES to be the entire population.
+   b) Set CASES to be a list of all the test cases in
+   random order.
+
+2) Loop:
+   a) Set CANDIDATES to be the subset of the current
+   CANDIDATES that have exactly the best performance
+   of any individual currently in CANDIDATES for the
+   first case in CASES.
+   b) If CANIDATES contains just a single individual,
+   then return it.
+   c) If CASES contains just a single test case then
+   return a randomly selected individual from CANDIDATES.
+   d) Otherwise, remove the first test case from CASES
+   and go to Loop.
+</pre>
+
+
+
+</section>
+</section>
+<section>
+<section id="slide-10">
+<h2 id="10"><span class="section-number-2">10</span> Opening the Black Box</h2>
+<p>
+So far, we have been treating the problem of recovering symbolic mathematical specifications from implementations as a <b>black box</b> problem, where all we have at our disposal is a set of the black box&rsquo;s inputs and outputs.
+</p>
+
+<p>
+But in doing so we leave a tremendous amount of information on the table.
+</p>
+
+<p>
+How can we put this additional information to use?
+</p>
+
+
+</section>
+</section>
+<section>
+<section id="slide-11">
+<h2 id="11"><span class="section-number-2">11</span> Constraint-Driven Genetic Programming (CDGP)</h2>
+<ul>
+<li>Begin by creating an initial set of tests <b>T</b> that any solution must pass: generate a random set of inputs for <i>f</i> and collecting the outputs.</li>
+<li>Establish a set of formal properties <b>C</b> that <i>f</i> is either certain or highly likely to satisfy.</li>
+<li>Generate an initial population of symbolic expressions, <b>P</b>, each of which expresses a Boolean function of <i>n</i> variables.</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-12">
+<h2 id="12"><span class="section-number-2">12</span> Constraint-Driven Genetic Programming (cont.)</h2>
+<ul>
+<li>Perform tournament or lexicase selection on <b>P</b>, to select a mating pair.</li>
+<li>Enlist an SMT solver (Z3, for instance) to attempt to generate an input that, when passed to our selected candidates, violates one or more of the constraints in <b>C</b>.</li>
+<li>If such an input can be generated, it will be considered a counterexample to our candidate solutions, and will be fed to <i>f</i> in order to generate a new datapoint, which will be appended to <b>T</b>.</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-13">
+<h2 id="13"><span class="section-number-2">13</span> Constraint-Driven Genetic Programming (cont.)</h2>
+<ul>
+<li>If, for some candidate <b>x</b>, no such counterexample can be found, and <i>all</i> of the tests in <b>T</b> have been passed without any errors, then we are finished: the symbolic expression <b>x</b> can be taken as a probable specification for the function implemented in <i>f</i>.</li>
+<li>So long as this is not the case, we apply one or more genetic operators (crossover, mutation) to the winning candidates, and insert the resulting offspring into <b>P</b>, replacing whichever individuals were first eliminated by the lexicase selection process.</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-14">
+<h2 id="14"><span class="section-number-2">14</span> Constraint-Driven Genetic Programming (cont.)</h2>
+<ul>
+<li>We repeat the process until a solution is found.</li>
+<li>Once a solution has been found, we test it against a fresh battery of input/output pairs (datapoints) generated by <i>f</i>, to better gauge the accuracy of our search. In any inaccuracies are detected, the discriminating tests are appended to <b>T</b>, and we resume the search. If not, we consider the search complete.</li>
+
+</ul>
+
+</section>
+<section id="slide-14-1">
+<h3 id="14-1"><span class="section-number-3">14.1</span> But where do our constraining properties come from?</h3>
+
+</section>
+</section>
+<section>
+<section id="slide-15">
+<h2 id="15"><span class="section-number-2">15</span> Probabilistic Property Testing</h2>
+<ul>
+<li>Since we have at our disposal not merely a subset of the target function&rsquo;s graph, but the implementation itself, we can employ this implementation as an &ldquo;oracle&rdquo;. We can feed it any input we like and record its output.</li>
+
+<li>This gives us all we need to avail ourselves of the mathematical theory of <i>probabilistic property testing</i>.</li>
+
+<li>This is a technique for determining whether or not a function <i>f</i> satisfies, with high probability, a given property <i>P</i>, on the basis of observing the behaviour of \(f(x)\) for a relatively small number of inputs \(x\) &#x2014; or else if <i>f</i> is &ldquo;far&rdquo; from every function that satisfies <i>P</i>.</li>
+
+<li>We plan on developing a Julia library that can be used to perform PPT on arbitrary black-boxed functions, or oracles.</li>
+
+</ul>
+
+
+</section>
+</section>
+<section>
+<section id="slide-16">
+<h2 id="16"><span class="section-number-2">16</span> Static Program Analysis</h2>
+<ul>
+<li>A wealth of information about the structure of <i>f</i> can be obtained through traditional static binary analysis.</li>
+<li>By constructing and inspecting the <i>data-flow graph</i> (DFG) for <i>f</i>, for instance, we are able to determine which parameters contribute to value of <i>f</i>.</li>
+<li>An inspection of <i>f</i>&rsquo;s <i>control-flow graph</i> (CFG) may allow us to assess <i>f</i>&rsquo;s worst-case computational complexity, relative to input.</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-17">
+<h2 id="17"><span class="section-number-2">17</span> Summary</h2>
+<ul>
+<li>Our approach to formula recovery goes from <b>outside</b> to <b>inside</b>, rather than the reverse.</li>
+<li>We begin with a black box, and then progressively constrain the search for symbolic specification by bringing constraints into play.</li>
+<li>These constraints may come from heterogeneous sources: probabilistic property testing, static analysis, and perhaps others can be added as we go.</li>
+
+</ul>
+</section>
+</section>
+</div>
+</div>
+<script src="/home/lucca/src/upstream/reveal.js/dist/reveal.js"></script>
+<script src="/home/lucca/src/upstream/reveal.js/plugin/markdown/markdown.js"></script>
+<script src="/home/lucca/src/upstream/reveal.js/plugin/notes/notes.js"></script>
+<script src="/home/lucca/src/upstream/reveal.js/plugin/search/search.js"></script>
+<script src="/home/lucca/src/upstream/reveal.js/plugin/zoom/zoom.js"></script>
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+
+controls: true,
+progress: true,
+history: false,
+center: true,
+slideNumber: 'c',
+rollingLinks: false,
+keyboard: true,
+mouseWheel: false,
+fragmentInURL: false,
+hashOneBasedIndex: false,
+pdfSeparateFragments: true,
+
+overview: true,
+
+transition: 'convex',
+transitionSpeed: 'default',
+
+// Plugins with reveal.js 4.x
+plugins: [ RevealMarkdown, RevealNotes, RevealSearch, RevealZoom ],
+
+// Optional libraries used to extend reveal.js
+dependencies: [
+]
+
+});
+</script>
+</body>
+</html>

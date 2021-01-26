@@ -4,7 +4,7 @@
 #+EMAIL: lucca.fraser@special-circumstanc.es
 #+DATE: 2021-01-26
 #+STARTUP: beamer
-#+REVEAL_ROOT: /home/lucca/src/upstream/reveal.js/dist/
+#+REVEAL_ROOT: /home/lucca/src/upstream/reveal.js/
 
 
 * Statement of the Problem
@@ -101,7 +101,8 @@ Helmuth and Spector have shown that for many such problems, their technique of *
 
  
 * Constraint-Driven Genetic Programming (CDGP)
-
+  
+  - Technique developed by Iwo Błądek and Kryzysztof Krawiec (see their 2019 paper, "Solving Symbolic Regression Problems with Formal Constraints").
      - Begin by creating an initial set of tests *T* that any solution must pass: generate a random set of inputs for /f/ and collecting the outputs.
      - Establish a set of formal properties *C* that /f/ is either certain or highly likely to satisfy.
      - Generate an initial population of symbolic expressions, *P*, each of which expresses a Boolean function of /n/ variables.
@@ -143,6 +144,7 @@ Helmuth and Spector have shown that for many such problems, their technique of *
 * Summary
 
   - Our approach to formula recovery goes from *outside* to *inside*, rather than the reverse.
-  - We begin with a black box, and then progressively constrain the search for symbolic specification by bringing constraints into play.
-  - These constraints may come from heterogeneous sources: probabilistic property testing, static analysis, and perhaps others can be added as we go.
+  - This provides a degree of robustness against code obfuscation, since the *execution behaviour* of the implementation is our primary source of information.
+  - We begin with a black box, and then progressively *constrain* the search for symbolic specification by bringing constraints into play.
+  - These constraints may come from *heterogeneous* sources: probabilistic property testing, static analysis, and perhaps others can be added as we go.
 

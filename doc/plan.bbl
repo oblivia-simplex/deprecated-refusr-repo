@@ -1,0 +1,69 @@
+\newcommand{\etalchar}[1]{$^{#1}$}
+\begin{thebibliography}{ASW{\etalchar{+}}20}
+
+\bibitem[ASW{\etalchar{+}}20]{ashok2020logic}
+Dhananjay Ashok, Joseph Scott, Sebastian Wetzel, Maysum Panju, and Vijay
+  Ganesh.
+\newblock Logic guided genetic algorithms, 2020.
+
+\bibitem[BBK14]{bailey2014simp}
+David~H. Bailey, Jonathan~M. Borwein, and Alexander~D. Kaiser.
+\newblock Automated simplification of large symbolic expressions.
+\newblock {\em Journal of Symbolic Computation}, 60:120 -- 136, 2014.
+
+\bibitem[BK19]{bladek2019symbolic}
+Iwo B\l{}\k{a}dek and Krzysztof Krawiec.
+\newblock Solving symbolic regression problems with formal constraints.
+\newblock In {\em Proceedings of the Genetic and Evolutionary Computation
+  Conference}, GECCO '19, page 977–984, New York, NY, USA, 2019. Association
+  for Computing Machinery.
+
+\bibitem[Bla12]{blais2012thesis}
+Eric Blais.
+\newblock {\em Testing properties of Boolean functions}.
+\newblock PhD thesis, Canegie Mellon, 1 2012.
+
+\bibitem[HSM15]{helmuth2015}
+T.~{Helmuth}, L.~{Spector}, and J.~{Matheson}.
+\newblock Solving uncompromising problems with lexicase selection.
+\newblock {\em IEEE Transactions on Evolutionary Computation}, 19(5):630--643,
+  Oct 2015.
+
+\bibitem[MB05]{makino2005verified_go}
+K.~Makino and M.~Berz.
+\newblock Verified global optimization with taylor model based range bounders.
+\newblock {\em WSEAS Transactions on Computers archive}, 4:1611--1618, 2005.
+
+\bibitem[NNH10]{nielson2010ppa}
+Flemming Nielson, Hanne~R. Nielson, and Chris Hankin.
+\newblock {\em Principles of Program Analysis}.
+\newblock Springer Publishing Company, Incorporated, 2010.
+
+\bibitem[PLM08]{poli2008fieldguide}
+Riccardo Poli, William Langdon, and Nicholas Mcphee.
+\newblock {\em A Field Guide to Genetic Programming}.
+\newblock 01 2008.
+
+\bibitem[RS96]{rubinfeld1996}
+Ronitt Rubinfeld and Madhu Sudan.
+\newblock Robust characterizations of polynomials withapplications to program
+  testing.
+\newblock {\em SIAM J. Comput.}, 25(2):252–271, February 1996.
+
+\bibitem[SK06]{spector2006}
+Lee Spector and Jon Klein.
+\newblock {\em Trivial Geography in Genetic Programming}, pages 109--123.
+\newblock Springer US, Boston, MA, 2006.
+
+\bibitem[WRH98]{whitley1998island}
+Darrell Whitley, Soraya Rana, and Robert Heckendorn.
+\newblock The island model genetic algorithm: On separability, population size
+  and convergence.
+\newblock {\em Journal of Computing and Information Technology}, 7, 12 1998.
+
+\bibitem[Xie18]{xie2018thesis}
+Jinyu Xie.
+\newblock {\em Property Testing of Boolean Functions}.
+\newblock PhD thesis, Columbia, 6 2018.
+
+\end{thebibliography}
