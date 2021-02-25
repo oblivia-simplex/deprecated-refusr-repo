@@ -43,8 +43,24 @@ julia> split(b, "\x56\xff\xff\x00")
 
    Byte 2 appears to be an opcode or function type indicator. Note the similarity in structure of messages that share an opcode.
 
+   #+begin_example
+julia> [m[2] for m in msgs] |> sort |> unique
+12-element Array{UInt8,1}:
+ 0x00
+ 0x01
+ 0x09
+ 0x12
+ 0x50
+ 0xaa
+ 0xab
+ 0xf0
+ 0xf1
+ 0xf3
+ 0xf4
+ 0xf6
+   #+end_example
    
-*** Opcode 0x09
+*** Opcode 0x09: initialize?
 
     All of the messages that contain human-readable ASCII substrings, with the exception of the opcode 0x12 message that contains the flow chart's file name, use opcode 0x09.
 
@@ -138,3 +154,54 @@ julia> [log(2, m[26])|>Int for m in m9[1:end-1] ]
     Byte 12 contains 0x62 for input pins, and 0x43 for output pins.
 
     Byte 13 gives us the pin index, again, but as an integer, not as a bitshifted flag.
+
+    
+*** Opcode 0x15: Set pins
+
+    #+begin_src julia
+    GAP = 0x00
+    PREFIX = [0x56, 0xff, 0xff, 0x00]
+
+    function mk_write_command(bits, on)
+        @assert all(1 <= i <= 6 for i in bits)
+        mask = sum(1<<(i-1) for i in bits)
+        cmd = [
+            PREFIX...,
+            0x15, 0x11, 0x01, 0x00, 0x01, 0x00, 0x00, 0x09, 0x01,
+            0x00, 0x00, 0x01, 0x00, GAP, 0x00, 0x00, GAP,
+        ]
+        cmd[18] = mask
+        cmd[21] = UInt8(on)
+        return cmd
+      end
+    #+end_src
+
+    
+*** Opcode 0x08: Read pins
+
+#+begin_src julia    
+function mk_read_command(bit, output=false)
+    cmd = [PREFIX..., 0x08, 0x0a, GAP, 0x01]
+    idx = output ? bit + 6 : bit
+    cmd[8] = idx
+    return cmd
+end
+#+end_src
+
+*** Opcode 0x07: Control
+
+#+begin_src julia
+CONTROL_COMMANDS =
+    [
+        # control instructions
+        "pause"       => [PREFIX..., 0x07, 0xf1, 0x02],
+        "play"        => [PREFIX..., 0x07, 0xf1, 0x01],
+        "reset"       => [PREFIX..., 0x07, 0xf1, 0x06],
+        "step_into"   => [PREFIX..., 0x07, 0xf1, 0x03],
+        "step_out"    => [PREFIX..., 0x07, 0xf1, 0x04],
+        "step_over"   => [PREFIX..., 0x07, 0xf1, 0x05],
+        "enter_debug" => [PREFIX..., 0x07, 0xf0, 0x02],
+        "exit_debug"  => [PREFIX..., 0x07, 0xf0, 0x01],
+    ] |> Dict
+#+end_src
+
