@@ -39,9 +39,9 @@ julia> split(b, "\x56\xff\xff\x00")
  "\0\xf1\x01"
    #+end_example
 
-** Opcode/Function type
+** Function Code/Function type
 
-   Byte 2 appears to be an opcode or function type indicator. Note the similarity in structure of messages that share an opcode.
+   Byte 2 appears to be a function code. Note the similarity in structure of messages that share an function code.
 
    #+begin_example
 julia> [m[2] for m in msgs] |> sort |> unique
@@ -60,9 +60,9 @@ julia> [m[2] for m in msgs] |> sort |> unique
  0xf6
    #+end_example
    
-*** Opcode 0x09: initialize?
+*** Function Code 0x09: Connections
 
-    All of the messages that contain human-readable ASCII substrings, with the exception of the opcode 0x12 message that contains the flow chart's file name, use opcode 0x09.
+    All of the messages that contain human-readable ASCII substrings, with the exception of the function code 0x12 message that contains the flow chart's file name, use function code 0x09.
 
     Most of these appear to concern the input and output pins (InBitC1 ... InBitC6, and OutBitD1 ... OutBitD6). The last concerns what's called the "vFactoryPage".
 
@@ -156,7 +156,30 @@ julia> [log(2, m[26])|>Int for m in m9[1:end-1] ]
     Byte 13 gives us the pin index, again, but as an integer, not as a bitshifted flag.
 
     
-*** Opcode 0x15: Set pins
+    
+**** as XML
+
+     These 0x09 messages seem to be a translation of the ~<Connections>~ node of the XML document:
+     
+     #+begin_src xml
+  <Connections>
+    <Connection sKey="vFactoryPage" bRemoteWritable="True" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="UI16" dataSource="register" />
+    <Connection sKey="InBitC1" iPort="2" iPin="1" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="InBitC2" iPort="2" iPin="2" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="InBitC3" iPort="2" iPin="3" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="InBitC4" iPort="2" iPin="4" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="InBitC5" iPort="2" iPin="5" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="InBitC6" iPort="2" iPin="6" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="input" />
+    <Connection sKey="OutBitD1" iPort="3" iPin="1" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+    <Connection sKey="OutBitD2" iPort="3" iPin="2" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+    <Connection sKey="OutBitD3" iPort="3" iPin="3" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+    <Connection sKey="OutBitD4" iPort="3" iPin="4" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+    <Connection sKey="OutBitD5" iPort="3" iPin="5" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+    <Connection sKey="OutBitD6" iPort="3" iPin="6" ui32Mask="0" ui32MessageId="0" ui32Period="0" dataType="Bit" dataSource="output" />
+  </Connections>
+     #+end_src
+     
+*** Function Code 0x15: Set pins
 
     #+begin_src julia
     GAP = 0x00
@@ -177,7 +200,7 @@ julia> [log(2, m[26])|>Int for m in m9[1:end-1] ]
     #+end_src
 
     
-*** Opcode 0x08: Read pins
+*** Function Code 0x08: Read pins
 
 #+begin_src julia    
 function mk_read_command(bit, output=false)
@@ -188,7 +211,7 @@ function mk_read_command(bit, output=false)
 end
 #+end_src
 
-*** Opcode 0x07: Control
+*** Function Code 0x07: Control
 
 #+begin_src julia
 CONTROL_COMMANDS =
