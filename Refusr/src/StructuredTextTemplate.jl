@@ -3,7 +3,7 @@ module StructuredTextTemplate
 PREFIX = raw"""
 FUNCTION_BLOCK F_CollectInput
   VAR_IN_OUT
-    Data : ARRAY[1..50] OF BOOL;    
+    Data : ARRAY[1..50] OF BOOL;
   END_VAR
   VAR_INPUT
     TICK : BOOL;
@@ -13,7 +13,7 @@ FUNCTION_BLOCK F_CollectInput
     IN4  : BOOL;
     IN5  : BOOL;
   END_VAR
-  VAR_OUTPUT 
+  VAR_OUTPUT
     Finished : BOOL;
   END_VAR
   VAR
@@ -29,11 +29,7 @@ FUNCTION_BLOCK F_CollectInput
     j := j + 5;
     tock := TICK;
   END_IF;
-  IF j > 50 THEN
-    Finished := 1;
-  ELSE
-    Finished := 0;
-  END_IF;
+  Finished := (j > 50);
 END_FUNCTION_BLOCK
 
 
@@ -55,7 +51,7 @@ PROGRAM Boiler
     Out      AT %QX0.2 : BOOL;
   END_VAR
   CollectInput(TICK:=TICK, IN1:=IN1, IN2:=IN2, IN3:=IN3, IN4:=IN4, IN5:=IN5);
-  Ready := CollectInput.Finished; 
+  Ready := CollectInput.Finished;
   FeedNext := 1;
   IF Ready THEN
 """

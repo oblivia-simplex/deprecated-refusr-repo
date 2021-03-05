@@ -25,18 +25,19 @@ NODES = [
     [(()->t,0) for t in TERMINALS]...,
 ]
 
-function grow(depth, max_depth)
+function grow(depth, max_depth; num_var=length(INPUT))
     if depth == max_depth
-        return rand(TERMINALS)
+        terminals = [INPUT[1:num_var]..., true, false]
+        return rand(terminals)
     else
         node, arity = rand(NONTERMINALS) #depth > 0 ? rand(NODES) : rand(NONTERMINALS)
-        args = [grow(depth+1, max_depth) for _ in 1:arity]
+        args = [grow(depth+1, max_depth, num_var=num_var) for _ in 1:arity]
         return node(args...)
     end
 end
 
 
-grow(max_depth) = grow(0, max_depth)
+grow(max_depth; num_var=length(INPUT)) = grow(0, max_depth, num_var=num_var)
 
 function st_op(f)
     if f == xor
