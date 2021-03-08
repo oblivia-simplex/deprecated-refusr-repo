@@ -20,17 +20,20 @@ NONTERMINALS = [
     (⊻, 3),
 ]
 
-NODES = [
-    NONTERMINALS...,
-    [(()->t,0) for t in TERMINALS]...,
-]
+function nodelist(terminals=TERMINALS)
+    vcat(
+        NONTERMINALS,
+        [(()->t, 0) for t in terminals]
+    )
+end
 
 function grow(depth, max_depth; num_var=length(INPUT))
+    terminals = [INPUT[1:num_var]..., true, false]
+    nodes = nodelist(terminals)
     if depth == max_depth
-        terminals = [INPUT[1:num_var]..., true, false]
         return rand(terminals)
     else
-        node, arity = rand(NONTERMINALS) #depth > 0 ? rand(NODES) : rand(NONTERMINALS)
+        (node, arity) = (depth > 0 && rand() > 0.5) ? rand(nodes) : rand(NONTERMINALS)
         args = [grow(depth+1, max_depth, num_var=num_var) for _ in 1:arity]
         return node(args...)
     end
@@ -85,12 +88,37 @@ function structured_text(expr)
 end
 
 
-function evaluate_with_input(expr, input::Vector{Bool})
-    @assert length(input) == length(INPUT)
-    TERMINALS = [INPUT..., true, false]
-    assignments = [I ← i for (I, i) in zip(INPUT, input)]
+function evaluate_with_input(expr; variables=INPUT, values::Vector{Bool})
+    @assert length(variables) == length(values)
+    assignments = [I ← i for (I, i) in zip(variables, values)]
     Let(assignments, expr) |> toexpr |> eval
 end
+
+
+function variables_used!(terminal::Bool, acc)
+    return
+end
+
+function variables_used!(terminal::SymbolicUtils.Sym, acc)
+    push!(acc, terminal)
+    return
+end
+
+function variables_used!(expr::SymbolicUtils.Term, acc)
+    for x in expr.arguments
+        variables_used!(x, acc)
+    end
+    return
+end
+
+function variables_used(expr)
+    acc = []
+    variables_used!(expr, acc)
+    sort!(acc, by = s -> parse(Int, String(s.name)[3:end]))
+    unique!(acc)
+    return acc
+end
+
 
 using DataFrames
 
@@ -98,12 +126,13 @@ function bits(n, num_bits)
     [(n & 1 << i != 0) for i in 0:(num_bits-1)]
 end
 
-function truth_table(expr)
-    table = DataFrame([[repr(i) => 0 for i in INPUT]..., "OUT" => 0])
-    for i in 0b00000:0b11111
-        input = bits(i, length(INPUT))
-        output = evaluate_with_input(expr, input)
-        row = [input..., output]
+function truth_table(expr; width=6)
+    variables = INPUT[1:width]
+    table = DataFrame([[repr(i) => 0 for i in variables]..., "OUT" => 0])
+    for i in 0:(2^width - 1)
+        values = bits(i, width)
+        output = evaluate_with_input(expr, variables=variables, values=values)
+        row = [values..., output]
         if i == 0
             table[1,:] = row
         else
@@ -112,4 +141,52 @@ function truth_table(expr)
     end
     table
 end
+
+function check_for_juntas(table; expr=nothing)
+    (_, ncols) = size(table)
+    nvars = ncols - 1
+    variables = INPUT[1:nvars]
+    used = expr === nothing ? variables : variables_used(expr)
+    used = [v.name for v in used]
+    if Bool.(table.OUT) |> all
+        println("[*] This function is a tautology!")
+        return variables
+    elseif Bool.(table.OUT) |> any |> !
+        println("[x] This function is an absurdity!")
+        return variables
+    end
+    irrelevant = []
+    for var in variables
+        if !(var.name in used)
+            println("[-] $(var.name) does not occur")
+            push!(irrelevant, var)
+            continue
+        end
+        col = var.name
+        T = select(filter(r -> r[col] == true, table), Not(col))
+        F = select(filter(r -> r[col] == false, table), Not(col))
+        if T == F
+            println("[-] $col is irrelevant")
+            push!(irrelevant, col)
+        end
+    end
+    relevant = [v for v in variables if !(v.name in irrelevant)]
+    if !isempty(irrelevant)
+        n = length(variables) - length(irrelevant)
+        println("[+] This function is a $(n)-junta.")
+        println("[+] Relevant variables: $(relevant)")
+    end
+    return relevant
+end
+
+
+function test_junta_checker()
+    w = 10
+    @show e = grow(5, num_var=w)
+    @show table = truth_table(e, width=w)
+    check_for_juntas(table, expr=e)
+    println(e)
+end
+
+
 
