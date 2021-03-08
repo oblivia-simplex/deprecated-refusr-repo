@@ -159,7 +159,7 @@ function check_for_juntas(table; expr=nothing)
     for var in variables
         if !(var.name in used)
             println("[-] $(var.name) does not occur")
-            push!(irrelevant, var)
+            push!(irrelevant, var.name)
             continue
         end
         col = var.name
