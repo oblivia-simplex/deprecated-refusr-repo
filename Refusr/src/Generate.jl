@@ -3,13 +3,15 @@ using SymbolicUtils.Code
 
 include("StructuredTextTemplate.jl")
 
-ARITY = 5 * 10
+ARITY = 1024
+
+"The material implication operator."
+(⊃)(a, b) = (!a) | b
 
 INPUT = [
     SymbolicUtils.Sym{Bool}(Symbol("IN$(i)"))
     for i in 1:ARITY
 ]
-
 
 TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
 
@@ -19,6 +21,65 @@ NONTERMINALS = [
     (|, 2),
     (⊻, 3),
 ]
+
+## Rewrite rules
+
+## Definition of XOR
+R_XOR_DEF = @acrule ~ϕ ⊻ ~ψ => (~ϕ & !~ψ) | (!~ϕ & ~ψ)
+R_XOR_DEFr = @acrule (~ϕ & !~ψ) | (!~ϕ & ~ψ) => ~ϕ ⊻ ~ψ
+R_XOR1 = @acrule ~ϕ ⊻ ~ϕ => false
+R_XOR2 = @acrule ~ϕ ⊻ true => !~ϕ
+R_XOR3 = @acrule ~ϕ ⊻ false => ~ϕ
+
+## Idempotence
+R_IDEM_AND = @acrule ~ϕ & ~ϕ => ~ϕ
+R_IDEM_OR  = @acrule ~ϕ | ~ϕ => ~ϕ
+
+# Double negation
+R_DN = @rule !(!~ϕ) => ~ϕ
+
+# Negation
+R_NEG_AND = @acrule ~ϕ & (!~ϕ) => false
+R_NEG_OR = @acrule ~ϕ | (!~ϕ) => true
+R_ABSORB_AND = @acrule ~ϕ & false => false
+R_ABSORB_OR = @acrule ~ϕ | true => true
+R_IDENT_AND = @acrule ~ϕ & true => ~ϕ
+R_IDENT_OR = @acrule ~ϕ | false => ~ϕ
+R_NEG_TRUE = @rule !true => false
+R_NEG_FALSE = @rule !false => true
+
+# Distribution
+R_DIST  = @acrule ~ϕ | (~ψ & ~ρ) => (~ϕ & ~ψ) | (~ϕ & ~ρ)
+R_DISTr = @acrule (~ϕ & ~ψ) | (~ϕ & ~ρ) => ~ϕ | (~ψ & ~ρ)
+
+# De Morgan's
+R_DeMORGAN1 = @acrule !(~ϕ & ~ψ) => (!~ϕ) | (!~ψ)
+R_DeMORGAN2 = @acrule !(~ϕ | ~ψ) => (!~ϕ) & (!~ψ)
+
+
+RULES = SymbolicUtils.Rewriters.RestartedChain([
+    R_XOR_DEF,
+    R_XOR_DEFr,
+    R_XOR1,
+    R_XOR2,
+    R_XOR3,
+    R_IDEM_AND,
+    R_DN,
+    R_NEG_AND,
+    R_NEG_OR,
+    R_ABSORB_AND,
+    R_ABSORB_OR,
+    R_IDENT_AND,
+    R_IDENT_OR,
+    R_NEG_TRUE,
+    R_NEG_FALSE,
+    R_DIST,
+    R_DISTr,
+    R_DeMORGAN1,
+    R_DeMORGAN2,
+]) |> Rewriters.Postwalk
+
+
 
 
 function grow(depth, max_depth, terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5)
@@ -33,7 +94,9 @@ function grow(depth, max_depth, terminals=TERMINALS, nonterminals=NONTERMINALS, 
 end
 
 
-grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5) = grow(0, max_depth, terminals, nonterminals, bushiness)
+function grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5)
+    grow(0, max_depth, terminals, nonterminals, bushiness)
+end
 
 
 function st_op(f)
@@ -120,23 +183,27 @@ function bits(n, num_bits)
     [(n & 1 << i != 0) for i in 0:(num_bits-1)]
 end
 
+bits(n) = bits(n, log(2, n) |> ceil |> Int)
+
 function truth_table(expr; width=6)
     variables = INPUT[1:width]
     table = DataFrame([[repr(i) => 0 for i in variables]..., "OUT" => 0])
-    for i in 0:(2^width - 1)
+    rows = [[] for _ in 1:(2^width)]
+    Threads.@threads for i in 0:(2^width - 1)
         values = bits(i, width)
         output = evaluate_with_input(expr, variables=variables, values=values)
         row = [values..., output]
-        if i == 0
-            table[1,:] = row
-        else
-            push!(table, row)
-        end
+        rows[i+1] = row
+    end
+    table[1,:] = rows[1]
+    for row in rows[2:end]
+        push!(table, row)
     end
     table
 end
 
 function check_for_juntas(table; expr=nothing)
+    #expr = simplify(expr, rewriter = RULES, threaded=true)
     (_, ncols) = size(table)
     nvars = ncols - 1
     variables = INPUT[1:nvars]
@@ -181,6 +248,32 @@ function test_junta_checker(w=10)
     @show table = truth_table(e, width=w)
     check_for_juntas(table, expr=e)
     println(e)
+end
+
+
+###
+# Designing some canonical boolean functions
+##
+
+function mux(ctrl_bits; vars=nothing, shuffle=true)
+    num_inputs = 2^ctrl_bits
+    if vars === nothing
+        vars = INPUT[1:num_inputs + ctrl_bits]
+    end
+    num_inputs + ctrl_bits <= length(vars)
+    wires = shuffle ? sort(vars, by = _ -> rand()) : vars
+    @show controls = wires[1:ctrl_bits]
+    @show input = wires[(ctrl_bits+1):(ctrl_bits+num_inputs)]
+    # the trick to this is normal form
+    m = foldl(&, map(0:(num_inputs-1)) do i
+          bs = bits(i, ctrl_bits)
+          antecedent = foldl(&, map(zip(bs, controls)) do (b, ctrl)
+                             b == 0 ? !ctrl : ctrl
+                             end)
+          consequent = input[i+1]
+          antecedent ⊃ consequent
+          end)
+    return m, controls, input
 end
 
 
