@@ -11,7 +11,7 @@ INPUT = [
 ]
 
 
-TERMINALS = [INPUT..., true, false]
+TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
 
 NONTERMINALS = [
     (!, 1),
@@ -20,27 +20,21 @@ NONTERMINALS = [
     (⊻, 3),
 ]
 
-function nodelist(terminals=TERMINALS)
-    vcat(
-        NONTERMINALS,
-        [(()->t, 0) for t in terminals]
-    )
-end
 
-function grow(depth, max_depth; num_var=length(INPUT))
-    terminals = [INPUT[1:num_var]..., true, false]
-    nodes = nodelist(terminals)
+function grow(depth, max_depth, terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5)
+    nodes = vcat(terminals, nonterminals)
     if depth == max_depth
-        return rand(terminals)
+        return first(rand(terminals))()
     else
-        (node, arity) = (depth > 0 && rand() > 0.5) ? rand(nodes) : rand(NONTERMINALS)
-        args = [grow(depth+1, max_depth, num_var=num_var) for _ in 1:arity]
+        (node, arity) = (depth > 0 && rand() > bushiness) ? rand(nodes) : rand(nonterminals)
+        args = [grow(depth+1, max_depth, terminals, nonterminals, bushiness) for _ in 1:arity]
         return node(args...)
     end
 end
 
 
-grow(max_depth; num_var=length(INPUT)) = grow(0, max_depth, num_var=num_var)
+grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5) = grow(0, max_depth, terminals, nonterminals, bushiness)
+
 
 function st_op(f)
     if f == xor
@@ -174,19 +168,19 @@ function check_for_juntas(table; expr=nothing)
     if !isempty(irrelevant)
         n = length(variables) - length(irrelevant)
         println("[+] This function is a $(n)-junta.")
-        println("[+] Relevant variables: $(relevant)")
+        names = [String(x.name) for x in relevant]
+        names = join(names, ", ")
+        println("[+] Relevant variables: $names")
     end
-    return relevant
+    return irrelevant
 end
 
 
-function test_junta_checker()
-    w = 10
+function test_junta_checker(w=10)
     @show e = grow(5, num_var=w)
     @show table = truth_table(e, width=w)
     check_for_juntas(table, expr=e)
     println(e)
 end
-
 
 
