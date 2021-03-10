@@ -76,6 +76,8 @@ END_CONFIGURATION
 """
 
 function wrap(expr, inputsize) 
+    # round inputsize up to the nearest power of 5
+    inputsize = ceil(inputsize / 5) * 5 |> Int
     prefix = replace(PREFIX, "###INPUTSIZE###" => "$(inputsize)")
     statement = "    Out := $(expr);\n"
     return prefix * statement * SUFFIX
