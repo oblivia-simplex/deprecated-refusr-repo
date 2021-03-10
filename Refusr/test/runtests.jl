@@ -44,6 +44,6 @@ function test_mux(ctrl_bits=3)
 end
 
 
-for i in 1:8
+for i in 1:5
     test_mux(i)
 end

@@ -3,7 +3,7 @@ using SymbolicUtils.Code
 
 include("StructuredTextTemplate.jl")
 
-ARITY = 1024
+ARITY = 50
 
 "The material implication operator."
 (⊃)(a, b) = (!a) | b
@@ -14,6 +14,16 @@ INPUT = [
 ]
 
 TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+
+
+function ensure_input_variables!(num)
+    global INPUT, TERMINALS
+    while length(INPUT) < num
+        push!(INPUT, SymbolicUtils.Sym{Bool}(Symbol("IN$(length(INPUT)+1)")))
+    end
+    TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+end
+
 
 NONTERMINALS = [
     (!, 1),
@@ -140,8 +150,8 @@ end
 
 
 
-function structured_text(expr)
-    expr |> structured_text_expr |> StructuredTextTemplate.wrap
+function structured_text(expr, inputsize=length(INPUT))
+    expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
 end
 
 
@@ -257,19 +267,18 @@ end
 
 function mux(ctrl_bits; vars=nothing, shuffle=true)
     num_inputs = 2^ctrl_bits
-    if vars === nothing
-        vars = INPUT[1:num_inputs + ctrl_bits]
-    end
-    num_inputs + ctrl_bits <= length(vars)
+    needed = num_inputs + ctrl_bits
+    ensure_input_variables!(needed)
+    vars = isnothing(vars) ? INPUT[1:needed] : vars
+    @assert length(vars) ≥ needed "At least $(needed) vars are needed"
     wires = shuffle ? sort(vars, by = _ -> rand()) : vars
-    @show controls = wires[1:ctrl_bits]
-    @show input = wires[(ctrl_bits+1):(ctrl_bits+num_inputs)]
-    # the trick to this is normal form
+    controls = wires[1:ctrl_bits]
+    input = wires[(ctrl_bits+1):(ctrl_bits+num_inputs)]
     m = foldl(&, map(0:(num_inputs-1)) do i
-          bs = bits(i, ctrl_bits)
-          antecedent = foldl(&, map(zip(bs, controls)) do (b, ctrl)
-                             b == 0 ? !ctrl : ctrl
-                             end)
+              switches = bits(i, ctrl_bits)
+              antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
+                                 s == 0 ? !c : c
+                                 end)
           consequent = input[i+1]
           antecedent ⊃ consequent
           end)

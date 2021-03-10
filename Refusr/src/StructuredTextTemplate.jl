@@ -3,7 +3,7 @@ module StructuredTextTemplate
 PREFIX = raw"""
 FUNCTION_BLOCK F_CollectInput
   VAR_IN_OUT
-      Data : ARRAY[1..50] OF BOOL;
+      Data : ARRAY[1..###INPUTSIZE###] OF BOOL;
   END_VAR
   VAR_INPUT
       TICK  : BOOL := 0;
@@ -33,13 +33,13 @@ FUNCTION_BLOCK F_CollectInput
       j := 1;
       tock := 0;
   END_IF;
-  Finished := (j > 50);
+  Finished := (j > ###INPUTSIZE###);
 END_FUNCTION_BLOCK
 
 
 PROGRAM Boiler
   VAR
-    Data  : ARRAY[1..50] OF BOOL;
+    Data  : ARRAY[1..###INPUTSIZE###] OF BOOL;
     Ready : BOOL;
     CollectInput : F_CollectInput;
   END_VAR
@@ -75,9 +75,10 @@ CONFIGURATION Config0
 END_CONFIGURATION
 """
 
-function wrap(expr) 
-  statement = "    Out := $(expr);\n"
-  return PREFIX * statement * SUFFIX
+function wrap(expr, inputsize) 
+    prefix = replace(PREFIX, "###INPUTSIZE###" => "$(inputsize)")
+    statement = "    Out := $(expr);\n"
+    return prefix * statement * SUFFIX
 end  
 
 
