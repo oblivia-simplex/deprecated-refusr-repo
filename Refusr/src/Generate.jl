@@ -1,9 +1,14 @@
 using SymbolicUtils
 using SymbolicUtils.Code
+using StatsBase
+using DataFrames
+using CSV
+
+include("Names.jl")
 
 include("StructuredTextTemplate.jl")
 
-ARITY = 50
+ARITY = 4
 
 "The material implication operator."
 (⊃)(a, b) = (!a) | b
@@ -16,13 +21,20 @@ INPUT = [
 TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
 
 
-function ensure_input_variables!(num)
+function ensure_input_variables!(num::Number)
     global INPUT, TERMINALS
     while length(INPUT) < num
         push!(INPUT, SymbolicUtils.Sym{Bool}(Symbol("IN$(length(INPUT)+1)")))
     end
     TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
 end
+
+function ensure_input_variables!(vars::Vector)
+    global INPUT, TERMINALS
+    INPUT = INPUT ∪ vars
+    TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+end
+
 
 
 NONTERMINALS = [
@@ -104,7 +116,7 @@ function grow(depth, max_depth, terminals=TERMINALS, nonterminals=NONTERMINALS, 
 end
 
 
-function grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5)
+function grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.8)
     grow(0, max_depth, terminals, nonterminals, bushiness)
 end
 
@@ -150,8 +162,14 @@ end
 
 
 
-function structured_text(expr, inputsize=length(INPUT))
-    expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
+function structured_text(expr; inputsize=length(INPUT), comment="")
+    variables_used(expr) |> ensure_input_variables!
+    st = expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
+    if length(comment) > 0
+        return "(*\n$(comment)\n*)\n\n$(st)"
+    else
+        return st
+    end
 end
 
 
@@ -187,30 +205,54 @@ function variables_used(expr)
 end
 
 
-using DataFrames
-
 function bits(n, num_bits)
-    [(n & 1 << i != 0) for i in 0:(num_bits-1)]
+    n = UInt128(n)
+    [(n & UInt128(1) << i != 0) for i in 0:(num_bits-1)]
 end
+
 
 bits(n) = bits(n, log(2, n) |> ceil |> Int)
 
-function truth_table(expr; width=6)
+
+function truth_table(expr; width=6, samplesize::Union{Symbol,Int}=:ALL)
+    width = UInt128(width)
+    # Sampling without replacement fails when the sample ranges over integers larger
+    # than 64 bits in width
+    @show use_replacement = (width > 60)
+    @show width
     variables = INPUT[1:width]
-    table = DataFrame([[repr(i) => 0 for i in variables]..., "OUT" => 0])
-    rows = [[] for _ in 1:(2^width)]
-    Threads.@threads for i in 0:(2^width - 1)
+    @show range = UInt128(0):(UInt128(2)^width-1)
+    if samplesize === :ALL || samplesize == 1.0
+        samplesize = length(range) |> Int128
+        sampling = range
+    else
+        if samplesize isa Float64 && samplesize < 1.0
+            samplesize = (samplesize * length(range)) |> UInt128
+        end
+        sampling = sample(range, samplesize, replace=use_replacement) |> sort
+    end
+    @show sampling
+    threadrows = []
+    for i in 1:Threads.nthreads()
+        push!(threadrows, [])
+    end
+    Threads.@threads for i in sampling
         values = bits(i, width)
         output = evaluate_with_input(expr, variables=variables, values=values)
         row = [values..., output]
-        rows[i+1] = row
+        push!(threadrows[Threads.threadid()], row)
+        binstr = [x ? '1' : '0' for x in row] |> String
+        println(binstr)
     end
+    rows = vcat(threadrows...)
+    table = DataFrame([[repr(i) => 0 for i in variables]..., "OUT" => 0])
     table[1,:] = rows[1]
     for row in rows[2:end]
         push!(table, row)
     end
     table
 end
+
 
 function check_for_juntas(table; expr=nothing)
     #expr = simplify(expr, rewriter = RULES, threaded=true)
@@ -273,7 +315,7 @@ function mux(ctrl_bits; vars=nothing, shuffle=true)
     @assert length(vars) ≥ needed "At least $(needed) vars are needed"
     wires = shuffle ? sort(vars, by = _ -> rand()) : vars
     controls = wires[1:ctrl_bits]
-    input = wires[(ctrl_bits+1):(ctrl_bits+num_inputs)]
+    input = wires[(ctrl_bits+1):end]
     m = foldl(&, map(0:(num_inputs-1)) do i
               switches = bits(i, ctrl_bits)
               antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
@@ -285,4 +327,58 @@ function mux(ctrl_bits; vars=nothing, shuffle=true)
     return m, controls, input
 end
 
+
+function generate_mux_code_and_sample(ctrl_bits; dir=".", samplesize=10000)
+    name = "$(ctrl_bits)-MUX_" * Names.rand_name(3)
+
+    m, c, i = mux(ctrl_bits, shuffle=true)
+    dataname(s) = "Data[$(String(s.name)[2:end])]"
+    comment = """This code implements a shuffled multiplexer with $(ctrl_bits) control bits.
+    The control bits are: $(join(dataname.(c), ", "))
+    The input bits are: $(join(dataname.(i), ", "))
+
+    The symbolic expression is:\n$(m)
+    """
+
+    tablewidth = UInt128(2)^ctrl_bits + ctrl_bits
+    
+    return generate_files(m, name=name, tablewidth=tablewidth, comment=comment, dir=dir, samplesize=samplesize)
+end
+
+
+function generate_random_code_and_sample(depth; dir=".", num_vars=50, samplesize=10000)
+    ensure_input_variables!(num_vars)
+    sexp = grow(depth, bushiness=0.8)
+
+    comment = """This code implements a randomly grown symbolic expression:\n\n$(sexp)\n"""
+
+    return generate_files(sexp, tablewidth=num_vars, comment=comment, dir=dir, samplesize=samplesize)
+end
+
+
+function generate_files(sexp; name=nothing, tablewidth=50, comment="", dir=".", samplesize=10000)
+
+    if isnothing(name)
+        name = "RND-EXPR_" * Names.rand_name(3)
+    end
+
+    st = structured_text(sexp, comment=comment, inputsize=tablewidth)
+
+    println(st)
+
+    table = truth_table(sexp, samplesize=samplesize, width=tablewidth)
+
+    csv_path = "$(dir)/$(name)_$(samplesize).csv"
+    st_path = "$(dir)/$(name).st"
+    sexp_path = "$(dir)/$(name).sexp"
+
+    println("[+] Saving symbolic expression to $sexp_path")
+    write(sexp_path, repr(sexp))
+    println("[+] Saving CSV to $csv_path")
+    CSV.write(csv_path, table)
+    println("[+] Saving ST code to $st_path")
+    write(st_path, st)
+
+    return sexp, table, st
+end
 
