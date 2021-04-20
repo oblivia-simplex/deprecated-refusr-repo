@@ -1,5 +1,5 @@
 using SymbolicUtils
-using SymbolicUtils.Code
+# using SymbolicUtils.Code
 using StatsBase
 using DataFrames
 using CSV
@@ -13,12 +13,9 @@ ARITY = 4
 "The material implication operator."
 (⊃)(a, b) = (!a) | b
 
-INPUT = [
-    SymbolicUtils.Sym{Bool}(Symbol("IN$(i)"))
-    for i in 1:ARITY
-]
+INPUT = [SymbolicUtils.Sym{Bool}(Symbol("IN$(i)")) for i = 1:ARITY]
 
-TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+TERMINALS = [(() -> t, 0) for t in [INPUT..., true, false]]
 
 
 function ensure_input_variables!(num::Number)
@@ -26,36 +23,31 @@ function ensure_input_variables!(num::Number)
     while length(INPUT) < num
         push!(INPUT, SymbolicUtils.Sym{Bool}(Symbol("IN$(length(INPUT)+1)")))
     end
-    TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+    TERMINALS = [(() -> t, 0) for t in [INPUT..., true, false]]
 end
 
 function ensure_input_variables!(vars::Vector)
     global INPUT, TERMINALS
     INPUT = INPUT ∪ vars
-    TERMINALS = [(()->t, 0) for t in [INPUT..., true, false]]
+    TERMINALS = [(() -> t, 0) for t in [INPUT..., true, false]]
 end
 
 
 
-NONTERMINALS = [
-    (!, 1),
-    (&, 2),
-    (|, 2),
-    (⊻, 3),
-]
+NONTERMINALS = [(!, 1), (&, 2), (|, 2), (⊻, 3)]
 
 ## Rewrite rules
 
 ## Definition of XOR
-R_XOR_DEF = @acrule ~ϕ ⊻ ~ψ => (~ϕ & !~ψ) | (!~ϕ & ~ψ)
-R_XOR_DEFr = @acrule (~ϕ & !~ψ) | (!~ϕ & ~ψ) => ~ϕ ⊻ ~ψ
+R_XOR_DEF = @acrule ~ϕ ⊻ ~ψ => (~ϕ & ! ~ ψ) | (!~ϕ & ~ψ)
+R_XOR_DEFr = @acrule (~ϕ & ! ~ ψ) | (!~ϕ & ~ψ) => ~ϕ ⊻ ~ψ
 R_XOR1 = @acrule ~ϕ ⊻ ~ϕ => false
 R_XOR2 = @acrule ~ϕ ⊻ true => !~ϕ
 R_XOR3 = @acrule ~ϕ ⊻ false => ~ϕ
 
 ## Idempotence
 R_IDEM_AND = @acrule ~ϕ & ~ϕ => ~ϕ
-R_IDEM_OR  = @acrule ~ϕ | ~ϕ => ~ϕ
+R_IDEM_OR = @acrule ~ϕ | ~ϕ => ~ϕ
 
 # Double negation
 R_DN = @rule !(!~ϕ) => ~ϕ
@@ -71,7 +63,7 @@ R_NEG_TRUE = @rule !true => false
 R_NEG_FALSE = @rule !false => true
 
 # Distribution
-R_DIST  = @acrule ~ϕ | (~ψ & ~ρ) => (~ϕ & ~ψ) | (~ϕ & ~ρ)
+R_DIST = @acrule ~ϕ | (~ψ & ~ρ) => (~ϕ & ~ψ) | (~ϕ & ~ρ)
 R_DISTr = @acrule (~ϕ & ~ψ) | (~ϕ & ~ρ) => ~ϕ | (~ψ & ~ρ)
 
 # De Morgan's
@@ -79,44 +71,60 @@ R_DeMORGAN1 = @acrule !(~ϕ & ~ψ) => (!~ϕ) | (!~ψ)
 R_DeMORGAN2 = @acrule !(~ϕ | ~ψ) => (!~ϕ) & (!~ψ)
 
 
-RULES = SymbolicUtils.Rewriters.RestartedChain([
-    R_XOR_DEF,
-    R_XOR_DEFr,
-    R_XOR1,
-    R_XOR2,
-    R_XOR3,
-    R_IDEM_AND,
-    R_DN,
-    R_NEG_AND,
-    R_NEG_OR,
-    R_ABSORB_AND,
-    R_ABSORB_OR,
-    R_IDENT_AND,
-    R_IDENT_OR,
-    R_NEG_TRUE,
-    R_NEG_FALSE,
-    R_DIST,
-    R_DISTr,
-    R_DeMORGAN1,
-    R_DeMORGAN2,
-]) |> Rewriters.Postwalk
+RULES =
+    SymbolicUtils.Rewriters.RestartedChain([
+        R_XOR_DEF,
+        R_XOR_DEFr,
+        R_XOR1,
+        R_XOR2,
+        R_XOR3,
+        R_IDEM_AND,
+        R_DN,
+        R_NEG_AND,
+        R_NEG_OR,
+        R_ABSORB_AND,
+        R_ABSORB_OR,
+        R_IDENT_AND,
+        R_IDENT_OR,
+        R_NEG_TRUE,
+        R_NEG_FALSE,
+        R_DIST,
+        R_DISTr,
+        R_DeMORGAN1,
+        R_DeMORGAN2,
+    ]) |> Rewriters.Postwalk
 
 
 
 
-function grow(depth, max_depth, terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.5)
+function grow(
+    depth,
+    max_depth,
+    terminals = TERMINALS,
+    nonterminals = NONTERMINALS,
+    bushiness = 0.5,
+)
     nodes = vcat(terminals, nonterminals)
     if depth == max_depth
         return first(rand(terminals))()
     else
-        (node, arity) = (depth > 0 && rand() > bushiness) ? rand(nodes) : rand(nonterminals)
-        args = [grow(depth+1, max_depth, terminals, nonterminals, bushiness) for _ in 1:arity]
+        (node, arity) =
+            (depth > 0 && rand() > bushiness) ? rand(nodes) : rand(nonterminals)
+        args = [
+            grow(depth + 1, max_depth, terminals, nonterminals, bushiness)
+            for _ = 1:arity
+        ]
         return node(args...)
     end
 end
 
 
-function grow(max_depth; terminals=TERMINALS, nonterminals=NONTERMINALS, bushiness=0.8)
+function grow(
+    max_depth;
+    terminals = TERMINALS,
+    nonterminals = NONTERMINALS,
+    bushiness = 0.8,
+)
     grow(0, max_depth, terminals, nonterminals, bushiness)
 end
 
@@ -152,7 +160,7 @@ end
 
 
 function structured_text_expr(terminal::SymbolicUtils.Sym)
-    for i in 1:length(INPUT)
+    for i = 1:length(INPUT)
         if terminal ≡ INPUT[i]
             return "Data[$i]"
         end
@@ -162,9 +170,12 @@ end
 
 
 
-function structured_text(expr; inputsize=length(INPUT), comment="")
+function structured_text(expr; inputsize = length(INPUT), comment = "")
     variables_used(expr) |> ensure_input_variables!
-    st = expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
+    st =
+        expr |>
+        structured_text_expr |>
+        e -> StructuredTextTemplate.wrap(e, inputsize)
     if length(comment) > 0
         return "(*\n$(comment)\n*)\n\n$(st)"
     else
@@ -173,7 +184,7 @@ function structured_text(expr; inputsize=length(INPUT), comment="")
 end
 
 
-function evaluate_with_input(expr; variables=INPUT, values::Vector{Bool})
+function evaluate_with_input(expr; variables = INPUT, values::Vector{Bool})
     @assert length(variables) == length(values)
     assignments = [I ← i for (I, i) in zip(variables, values)]
     Let(assignments, expr) |> toexpr |> eval
@@ -207,14 +218,14 @@ end
 
 function bits(n, num_bits)
     n = UInt128(n)
-    [(n & UInt128(1) << i != 0) for i in 0:(num_bits-1)]
+    [(n & UInt128(1) << i != 0) for i = 0:(num_bits-1)]
 end
 
 
 bits(n) = bits(n, log(2, n) |> ceil |> Int)
 
 
-function truth_table(expr; width=6, samplesize::Union{Symbol,Int}=:ALL)
+function truth_table(expr; width = 6, samplesize::Union{Symbol,Int} = :ALL)
     width = UInt128(width)
     # Sampling without replacement fails when the sample ranges over integers larger
     # than 64 bits in width
@@ -229,16 +240,17 @@ function truth_table(expr; width=6, samplesize::Union{Symbol,Int}=:ALL)
         if samplesize isa Float64 && samplesize < 1.0
             samplesize = (samplesize * length(range)) |> UInt128
         end
-        sampling = sample(range, samplesize, replace=use_replacement) |> sort
+        sampling = sample(range, samplesize, replace = use_replacement) |> sort
     end
     @show sampling
     threadrows = []
-    for i in 1:Threads.nthreads()
+    for i = 1:Threads.nthreads()
         push!(threadrows, [])
     end
     Threads.@threads for i in sampling
         values = bits(i, width)
-        output = evaluate_with_input(expr, variables=variables, values=values)
+        output =
+            evaluate_with_input(expr, variables = variables, values = values)
         row = [values..., output]
         push!(threadrows[Threads.threadid()], row)
         binstr = [x ? '1' : '0' for x in row] |> String
@@ -246,7 +258,7 @@ function truth_table(expr; width=6, samplesize::Union{Symbol,Int}=:ALL)
     end
     rows = vcat(threadrows...)
     table = DataFrame([[repr(i) => 0 for i in variables]..., "OUT" => 0])
-    table[1,:] = rows[1]
+    table[1, :] = rows[1]
     for row in rows[2:end]
         push!(table, row)
     end
@@ -254,7 +266,7 @@ function truth_table(expr; width=6, samplesize::Union{Symbol,Int}=:ALL)
 end
 
 
-function check_for_juntas(table; expr=nothing)
+function check_for_juntas(table; expr = nothing)
     #expr = simplify(expr, rewriter = RULES, threaded=true)
     (_, ncols) = size(table)
     nvars = ncols - 1
@@ -295,10 +307,10 @@ function check_for_juntas(table; expr=nothing)
 end
 
 
-function test_junta_checker(w=10)
-    @show e = grow(5, num_var=w)
-    @show table = truth_table(e, width=w)
-    check_for_juntas(table, expr=e)
+function test_junta_checker(w = 10)
+    @show e = grow(5, num_var = w)
+    @show table = truth_table(e, width = w)
+    check_for_juntas(table, expr = e)
     println(e)
 end
 
@@ -307,7 +319,7 @@ end
 # Designing some canonical boolean functions
 ##
 
-function mux(ctrl_bits; vars=nothing, shuffle=true)
+function mux(ctrl_bits; vars = nothing, shuffle = true)
     num_inputs = 2^ctrl_bits
     needed = num_inputs + ctrl_bits
     ensure_input_variables!(needed)
@@ -316,22 +328,25 @@ function mux(ctrl_bits; vars=nothing, shuffle=true)
     wires = shuffle ? sort(vars, by = _ -> rand()) : vars
     controls = wires[1:ctrl_bits]
     input = wires[(ctrl_bits+1):end]
-    m = foldl(&, map(0:(num_inputs-1)) do i
-              switches = bits(i, ctrl_bits)
-              antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
-                                 s == 0 ? !c : c
-                                 end)
-          consequent = input[i+1]
-          antecedent ⊃ consequent
-          end)
+    m = foldl(
+        &,
+        map(0:(num_inputs-1)) do i
+            switches = bits(i, ctrl_bits)
+            antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
+                s == 0 ? !c : c
+            end)
+            consequent = input[i+1]
+            antecedent ⊃ consequent
+        end,
+    )
     return m, controls, input
 end
 
 
-function generate_mux_code_and_sample(ctrl_bits; dir=".", samplesize=10000)
+function generate_mux_code_and_sample(ctrl_bits; dir = ".", samplesize = 10000)
     name = "$(ctrl_bits)-MUX_" * Names.rand_name(3)
 
-    m, c, i = mux(ctrl_bits, shuffle=true)
+    m, c, i = mux(ctrl_bits, shuffle = true)
     dataname(s) = "Data[$(String(s.name)[2:end])]"
     comment = """This code implements a shuffled multiplexer with $(ctrl_bits) control bits.
     The control bits are: $(join(dataname.(c), ", "))
@@ -341,32 +356,57 @@ function generate_mux_code_and_sample(ctrl_bits; dir=".", samplesize=10000)
     """
 
     tablewidth = UInt128(2)^ctrl_bits + ctrl_bits
-    
-    return generate_files(m, name=name, tablewidth=tablewidth, comment=comment, dir=dir, samplesize=samplesize)
+
+    return generate_files(
+        m,
+        name = name,
+        tablewidth = tablewidth,
+        comment = comment,
+        dir = dir,
+        samplesize = samplesize,
+    )
 end
 
 
-function generate_random_code_and_sample(depth; dir=".", num_vars=50, samplesize=10000)
+function generate_random_code_and_sample(
+    depth;
+    dir = ".",
+    num_vars = 50,
+    samplesize = 10000,
+)
     ensure_input_variables!(num_vars)
-    sexp = grow(depth, bushiness=0.8)
+    sexp = grow(depth, bushiness = 0.8)
 
     comment = """This code implements a randomly grown symbolic expression:\n\n$(sexp)\n"""
 
-    return generate_files(sexp, tablewidth=num_vars, comment=comment, dir=dir, samplesize=samplesize)
+    return generate_files(
+        sexp,
+        tablewidth = num_vars,
+        comment = comment,
+        dir = dir,
+        samplesize = samplesize,
+    )
 end
 
 
-function generate_files(sexp; name=nothing, tablewidth=50, comment="", dir=".", samplesize=10000)
+function generate_files(
+    sexp;
+    name = nothing,
+    tablewidth = 50,
+    comment = "",
+    dir = ".",
+    samplesize = 10000,
+)
 
     if isnothing(name)
         name = "RND-EXPR_" * Names.rand_name(3)
     end
 
-    st = structured_text(sexp, comment=comment, inputsize=tablewidth)
+    st = structured_text(sexp, comment = comment, inputsize = tablewidth)
 
     println(st)
 
-    table = truth_table(sexp, samplesize=samplesize, width=tablewidth)
+    table = truth_table(sexp, samplesize = samplesize, width = tablewidth)
 
     csv_path = "$(dir)/$(name)_$(samplesize).csv"
     st_path = "$(dir)/$(name).st"
@@ -381,4 +421,3 @@ function generate_files(sexp; name=nothing, tablewidth=50, comment="", dir=".", 
 
     return sexp, table, st
 end
-
