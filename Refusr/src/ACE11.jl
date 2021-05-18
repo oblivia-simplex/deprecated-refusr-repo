@@ -40,11 +40,26 @@ end
 
 function mk_write_command(bits, on)
     @assert all(1 <= i <= 6 for i in bits)
-    mask = sum(1<<(i-1) for i in bits)
+    mask = sum(1 << (i - 1) for i in bits)
     cmd = [
         PREFIX...,
-        0x15, 0x11, 0x01, 0x00, 0x01, 0x00, 0x00, 0x09, 0x01,
-        0x00, 0x00, 0x01, 0x00, GAP, 0x00, 0x00, GAP,
+        0x15,
+        0x11,
+        0x01,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x09,
+        0x01,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        GAP,
+        0x00,
+        0x00,
+        GAP,
     ]
     cmd[18] = mask
     cmd[21] = UInt8(on)
@@ -52,7 +67,7 @@ function mk_write_command(bits, on)
 end
 
 
-function mk_read_command(bit, output=false)
+function mk_read_command(bit, output = false)
     cmd = [PREFIX..., 0x08, 0x0a, GAP, 0x01]
     idx = output ? bit + 6 : bit
     cmd[8] = idx
@@ -63,14 +78,14 @@ end
 CONTROL_COMMANDS =
     [
         # control instructions
-        "pause"       => [PREFIX..., 0x07, 0xf1, 0x02],
-        "play"        => [PREFIX..., 0x07, 0xf1, 0x01],
-        "reset"       => [PREFIX..., 0x07, 0xf1, 0x06],
-        "step_into"   => [PREFIX..., 0x07, 0xf1, 0x03],
-        "step_out"    => [PREFIX..., 0x07, 0xf1, 0x04],
-        "step_over"   => [PREFIX..., 0x07, 0xf1, 0x05],
+        "pause" => [PREFIX..., 0x07, 0xf1, 0x02],
+        "play" => [PREFIX..., 0x07, 0xf1, 0x01],
+        "reset" => [PREFIX..., 0x07, 0xf1, 0x06],
+        "step_into" => [PREFIX..., 0x07, 0xf1, 0x03],
+        "step_out" => [PREFIX..., 0x07, 0xf1, 0x04],
+        "step_over" => [PREFIX..., 0x07, 0xf1, 0x05],
         "enter_debug" => [PREFIX..., 0x07, 0xf0, 0x02],
-        "exit_debug"  => [PREFIX..., 0x07, 0xf0, 0x01],
+        "exit_debug" => [PREFIX..., 0x07, 0xf0, 0x01],
     ] |> Dict
 
 
@@ -78,14 +93,14 @@ function mk_control_command(name)
     return CONTROL_COMMANDS[name]
 end
 
-function send_commands(commands; portname=PORTNAME, baudrate=BAUDRATE)
+function send_commands(commands; portname = PORTNAME, baudrate = BAUDRATE)
 
     rx = []
 
     # LibSerialPort.open(portname, baudrate) do sp
     sp = SerialPort(portname, baudrate)
     if (@show bytesavailable(sp)) > 0
-       
+
         #flush(sp)
     end
 
@@ -127,16 +142,18 @@ end
 
 # This function lets us treat the device like a black boxed boolean function
 # of up to 6 variables.
-function call_boolean(args::Vector{Bool};
-                      ret_bits=[1],
-                      portname=PORTNAME,
-                      baudrate=BAUDRATE,
-                      mockup::Union{Nothing,Function}=MOCKUP)
+function call_boolean(
+    args::Vector{Bool};
+    ret_bits = [1],
+    portname = PORTNAME,
+    baudrate = BAUDRATE,
+    mockup::Union{Nothing,Function} = MOCKUP,
+)
     @assert length(args) <= 6
     if mockup !== nothing
-      return mockup(args...)
+        return mockup(args...)
     end
-    bits = [i for (i,x) in enumerate(args) if x]
+    bits = [i for (i, x) in enumerate(args) if x]
     write_cmds = [
         mk_write_command(1:6, false),  # set all the bits to the off position
         mk_write_command(bits, true),  # set the true bits to the on position
@@ -155,7 +172,7 @@ function call_boolean(args::Vector{Bool};
 end
 
 
-    
+
 
 
 
