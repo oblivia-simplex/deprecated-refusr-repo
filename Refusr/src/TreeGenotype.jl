@@ -1,4 +1,4 @@
-module Genotype
+module TreeGenotype
 using DataFrames
 using StatsBase
 using FunctionWrappers: FunctionWrapper
@@ -16,6 +16,12 @@ Base.@kwdef mutable struct Creature
     phenotype = nothing
     name::Any
 end
+
+
+isterminal(e) = false
+
+
+isterminal(e::Expr) = e.head === :ref
 
 
 function generate_input_variables(num)
@@ -205,7 +211,7 @@ end
 function expr_index(expr::Expr, indices...)
     e = expr.args[indices[1]]
     for i in indices[2:end]
-        @assert e.head === :call
+        @assert !isterminal(e)
         e = e.args[i]
     end
     return e
@@ -227,9 +233,9 @@ end
 
 
 function enumerate_expr!(table, path, expr::Expr; startat = 2)
-    if expr.head === :call
+    if !isterminal(expr)
         for (i, a) in enumerate(expr.args[startat:end])
-            if a isa Expr 
+            if !isterminal(a)
                 p = [path..., (i + startat - 1)]
                 table[p] = a
                 enumerate_expr!(table, p, a, startat = startat)
@@ -243,12 +249,13 @@ end
 function enumerate_expr(expr::Expr; startat = 2)
     table = Dict()
     path = []
+    table[[]] = expr
     enumerate_expr!(table, path, expr, startat = startat)
     table
 end
 
 function validate_path!(path::Vector, table::Dict)
-    if length(path) > 0 && !(table[path] isa Expr)
+    if length(path) > 0 && isterminal(table[path])
         pop!(path)
         validate_path!(path, table)
     else
@@ -257,8 +264,8 @@ function validate_path!(path::Vector, table::Dict)
 end
 
 
-function random_subexpr(e::Expr)
-    table = enumerate_expr(e)
+function random_subexpr(e::Expr; maxdepth=8)
+    table = filter(x -> length(x) <= maxdepth, enumerate_expr(e))
     if isempty(table)
         return [], e
     end
@@ -269,6 +276,24 @@ function random_subexpr(e::Expr)
     path, table[path]
 end
 
+
+function prune!(e::Expr, depth, terminals)
+    isterminal(e) && return
+    if depth <= 1
+        for i in 2:length(e.args)
+            if e.args[i] isa Expr
+                e.args[i] = rand(terminals).first
+            end
+        end
+    else
+        for arg in e.args[2:end]
+            prune!(arg, depth-1, terminals)
+        end
+    end
+end
+
+
+prune!(e, depth, terminals) = nothing
 
 # TODO: implement size-fair and/or homologous crossover
 # a la Langdon
@@ -285,6 +310,10 @@ end
 
 function crossover(a::Creature, b::Creature; config = nothing)
     chromosomes = crossover(a.chromosome, b.chromosome)
+    terminals = generate_terminals(config.genotype.inputs_n)
+    for g in chromosomes
+        prune!(g, config.genotype.max_depth, terminals)
+    end
     generation = max(a.generation, b.generation) + 1
     name = Names.rand_name(4)
     fitness = fill(-Inf, length(a.fitness))
@@ -305,21 +334,16 @@ end
 
 function mutate(a::Expr; config=nothing)
     terminals = generate_terminals(config.genotype.inputs_n)
-    crossover(a, grow(depth, terminals=terminals))
+    crossover(a, grow(depth, terminals=terminals), config=config)
 end
 
 
 function mutate!(a::Expr; config=nothing)
-    table_a = enumerate_expr(a)
-    if isempty(table_a)
-        return a
-    end
-    depth = length.(keys(table_a)) |> maximum
+    depth = 3
     terminals = generate_terminals(config.genotype.inputs_n)
     b = grow(depth, terminals = terminals)
-    table_b = enumerate_expr(b)
-    key, _ = rand(table_a)
-    _, sub = isempty(table_b) ? (nothing, b) : rand(table_b)
+    key, _ = random_subexpr(a)
+    _, sub = random_subexpr(b)
     expr_set!(a, sub, key...)
     a
 end
@@ -331,52 +355,18 @@ function mutate!(a::Creature; config = nothing)
 end
 
 
-module FF
-
-using ..Genotype: evalwith, grow, truth_table, enumerate_expr, compile_chromosome
-using FunctionWrappers: FunctionWrapper
-using Statistics, CSV, DataFrames
-
-DATA = nothing
-TRUE_REWARD, FALSE_REWARD = Inf, Inf
-
-function _set_data(data::String)
-    global DATA, TRUE_TO_FALSE, FALSE_TO_TRUE
-    DATA = CSV.read(data, DataFrame)
-    FALSE_REWARD = (DATA[:, end] |> mean) * 2.0
-    TRUE_REWARD = 2.0 - FALSE_REWARD
-    TRUE_REWARD, FALSE_REWARD
-end
-
-
-
-function fit(g; config = nothing)
-    global DATA
-    if DATA === nothing
-        _set_data(config.selection.data)
-    end
+function evaluate(g::Creature; data::Vector)
     if g.program === nothing
         g.program = compile_chromosome(g.chromosome)
     end
-    if g.phenotype === nothing
-        g.phenotype = [g.program(collect(r)[1:end-1]) for r in eachrow(DATA)]
-    end
-    answers = [r[end] for r in eachrow(DATA)]
-    score = map(zip(g.phenotype, answers)) do (r,a)
-        if r == a
-            r ? TRUE_REWARD : FALSE_REWARD
-        else
-            0.0
-        end
-    end |> sum
-    accuracy = score / length(eachrow(DATA))
-    len = length(enumerate_expr(g.chromosome))
-    parsimony = len > 0 ? 1 / len : 0.0
-    g.fitness = [accuracy, parsimony]
-    return g.fitness
+    g.program(data)
 end
 
+function parsimony(g::Creature)
+    table = enumerate_expr(g.chromosome)
+    len = length(table)
+    len == 0 ? -Inf : 1.0 / len
+end
 
-end # end module FF
 
 end # end module Genotype
