@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+BeeEncoder = "88bd2ba4-b024-4779-b1f7-c7f148753aae"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Cockatrice = "9717ed07-727c-442c-8f6f-35ef42c1d4d5"
@@ -24,3 +25,4 @@ SymbolicRegression = "8254be44-1295-4e6a-a16d-46603ac705cb"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TreeView = "39424ebd-4cf3-5550-a685-96706a953f40"
+Z3 = "06b161dc-0161-11ea-0f74-41f836f4024b"

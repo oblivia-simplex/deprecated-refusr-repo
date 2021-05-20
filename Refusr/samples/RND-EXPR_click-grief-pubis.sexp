@@ -1,0 +1,1 @@
+(xor(xor(IN40, IN23), IN33)) | IN36
