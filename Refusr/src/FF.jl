@@ -3,33 +3,37 @@ module FF
 #using ..TreeGenotype: evaluate, parsimony
 using ..LinearGenotype: evaluate, parsimony
 using FunctionWrappers: FunctionWrapper
-using Statistics, CSV, DataFrames, InformationMeasures
+using Statistics, CSV, DataFrames, InformationMeasures, StatsBase
 
 DATA = nothing
-TRUE_REWARD, FALSE_REWARD = Inf, Inf
 
-function _set_data(data::String)
-    global DATA, TRUE_REWARD, FALSE_REWARD
-    DATA = CSV.read(data, DataFrame)
-    FALSE_REWARD = (DATA[:, end] |> mean) * 2.0
-    TRUE_REWARD = 2.0 - FALSE_REWARD
-    TRUE_REWARD, FALSE_REWARD
+function _set_data(data::String; samplesize=1000)
+    global DATA
+    data = CSV.read(data, DataFrame)
+    rows = sample(1:size(data,1), samplesize, replace=false)
+    DATA = data[rows, :]
 end
 
+function _set_data(data::DataFrame)
+    global DATA
+    DATA = data
+end
 
+mutualinfo(a, b) = a == b ? 1.0 : get_mutual_information(a, b)
 
 function fit(g; config = nothing)
     global DATA
     if DATA === nothing
         _set_data(config.selection.data)
     end
+    p = parsimony(g)
     if g.phenotype === nothing
         g.phenotype = [evaluate(g, data=collect(Bool, r[1:end-1])) for r in eachrow(DATA)]
     end
     answers = [r[end] for r in eachrow(DATA)]
-    score = get_mutual_information(answers, g.phenotype)
+    mutinfo = round(mutualinfo(answers, g.phenotype), digits=4)
     accuracy = 1.0 - (answers .⊻ g.phenotype |> sum) / length(answers)
-    g.fitness = [accuracy, score, parsimony(g)]
+    g.fitness = [mutinfo, accuracy, p]
     return g.fitness
 end
 

@@ -108,9 +108,12 @@ function grow(
     if depth == max_depth
         return first(rand(terminals))()
     else
-        (node, arity) = (depth > 0 && rand() > bushiness) ? rand(nodes) : rand(nonterminals)
-        args =
-            [grow(depth + 1, max_depth, terminals, nonterminals, bushiness) for _ = 1:arity]
+        (node, arity) =
+            (depth > 0 && rand() > bushiness) ? rand(nodes) : rand(nonterminals)
+        args = [
+            grow(depth + 1, max_depth, terminals, nonterminals, bushiness)
+            for _ = 1:arity
+        ]
         return node(args...)
     end
 end
@@ -169,7 +172,10 @@ end
 
 function structured_text(expr; inputsize = length(INPUT), comment = "")
     variables_used(expr) |> ensure_input_variables!
-    st = expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
+    st =
+        expr |>
+        structured_text_expr |>
+        e -> StructuredTextTemplate.wrap(e, inputsize)
     if length(comment) > 0
         return "(*\n$(comment)\n*)\n\n$(st)"
     else
@@ -243,7 +249,8 @@ function truth_table(expr; width = 6, samplesize::Union{Symbol,Int} = :ALL)
     end
     Threads.@threads for i in sampling
         values = bits(i, width)
-        output = evaluate_with_input(expr, variables = variables, values = values)
+        output =
+            evaluate_with_input(expr, variables = variables, values = values)
         row = [values..., output]
         push!(threadrows[Threads.threadid()], row)
         binstr = [x ? '1' : '0' for x in row] |> String
@@ -321,14 +328,17 @@ function mux(ctrl_bits; vars = nothing, shuffle = true)
     wires = shuffle ? sort(vars, by = _ -> rand()) : vars
     controls = wires[1:ctrl_bits]
     input = wires[(ctrl_bits+1):end]
-    m = foldl(&, map(0:(num_inputs-1)) do i
-        switches = bits(i, ctrl_bits)
-        antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
-            s == 0 ? !c : c
-        end)
-        consequent = input[i+1]
-        antecedent ⊃ consequent
-    end)
+    m = foldl(
+        &,
+        map(0:(num_inputs-1)) do i
+            switches = bits(i, ctrl_bits)
+            antecedent = foldl(&, map(zip(switches, controls)) do (s, c)
+                s == 0 ? !c : c
+            end)
+            consequent = input[i+1]
+            antecedent ⊃ consequent
+        end,
+    )
     return m, controls, input
 end
 
