@@ -117,7 +117,7 @@ function rand_inst(;ops=OPS, num_regs=NUM_REGS)
 end
 
 
-I(ar,i) = ar[mod1(abs(i), length(ar))]
+@inline I(ar,i) = ar[mod1(abs(i), length(ar))]
 
 function evaluate_inst!(;regs::Vector, data::Vector, inst::Inst)
     s_regs = inst.src < 0 ? data : regs
@@ -171,6 +171,47 @@ end
 function parsimony(g::Creature)
     len = length(g.chromosome)
     len == 0 ? -Inf : 1.0 / len
+end
+
+ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :! => "NOT"] |> Dict
+
+function st_inst(inst::Inst)
+    src = inst.src < 0 ? "Data[$(abs(inst.src))]" : "R[$(inst.src)]"
+    dst = "R[$(inst.dst)]"
+    lhs = "$(dst) := "
+    if inst.arity == 2
+        op = ST_TRANS[nameof(inst.op)]
+        rhs = "$(dst) $(op) $(src);"
+    elseif inst.arity == 1
+        op = ST_TRANS[nameof(inst.op)]
+        rhs = "$(op) $(src);"
+    else # inst.arity == 0
+        op = string(inst.op()) |> uppercase
+        rhs = "$(op);"
+    end
+    lhs * rhs
+end
+
+function structured_text(prog; config=nothing, comment="")
+    prog = strip_introns(prog, [1])
+    reg_decl = """
+VAR
+    R : ARRAY[1..$(NUM_REGS)] OF BOOL;
+END_VAR
+
+"""
+    body = "    " * join(map(st_inst, prog), "\n    ")
+    out = "\n    Out := R[1];\n"
+
+    payload = reg_decl * body * out
+
+    inputsize = config.genotype.inputs_n
+    st = StructuredTextTemplate.wrap(payload, inputsize)
+    if length(comment) > 0
+        return "(*\n$(comment)\n*)\n\n$(st)"
+    else
+        return st
+    end
 end
 
 end # end module

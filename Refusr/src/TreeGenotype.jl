@@ -70,7 +70,7 @@ end
 
 NONTERMINALS = [:& => 2, :| => 2, :⊻ => 2, :! => 1]
 
-ST_TRANS = [:& => "AND", :⊻ => "XOR", :| => "OR", :! => "NOT"] |> Dict
+ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :! => "NOT"] |> Dict
 
 
 function structured_text_expr(expr::Expr)
