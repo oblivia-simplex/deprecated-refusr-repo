@@ -1,0 +1,77 @@
+(*
+This code implements a randomly grown symbolic expression:
+
+xor(xor((xor(xor((!(xor(xor(IN1, !(((xor(xor(IN9, false), IN23)) | (!(IN25))) & IN44)), (!(IN16 | (IN48 | IN3))) & ((!(IN24)) | ((IN45 | IN50) & (xor(xor(true, IN37), IN36))))))) | (!(xor(xor(IN45, !(!(IN24 | (xor(xor(IN42, IN24), IN37))))), xor(xor(IN32 | (xor(xor(!(IN31), IN1 | IN43), IN50 & IN38)), ((!(IN37)) | (IN24 | IN12)) & (xor(xor(xor(xor(IN23, IN20), IN44), IN3 & IN28), xor(xor(IN4, IN33), IN46)))), !((IN44 & IN24) & (!(IN26))))))), IN48), !(xor(xor(IN19, IN41), IN10 & (xor(xor(!((IN31 | IN33) | (!(IN2))), IN49), ((IN33 & IN10) & (!(IN46))) & (xor(xor(IN48, !(IN17)), IN17 | IN23)))))))) | IN35, (!((xor(xor(xor(xor(!(((!(IN13)) | (IN33 & IN11)) | ((!(IN26)) & (IN31 & IN33))), ((IN13 | (IN37 & IN1)) & (IN15 & (xor(xor(IN18, IN36), IN22)))) | (!(IN32 | (IN20 | IN32)))), (((xor(xor(IN43, IN21), false)) | IN15) | ((xor(xor(IN8, IN50), IN26)) | (xor(xor(IN42, IN47), IN44)))) | ((!(xor(xor(IN45, IN2), IN34))) | ((!(IN9)) | (!(IN18))))), !(xor(xor(!((xor(xor(IN42, IN48), IN14)) & (IN12 | IN49)), IN38), IN46))), xor(xor(xor(xor(IN23, (!(IN16)) & ((IN30 & IN49) | (xor(xor(IN44, IN3), IN22)))), !(!(xor(xor(IN5, IN31), IN5)))), IN13 | (!((!(IN7)) | IN1))), ((xor(xor(IN2 | IN24, IN44 & IN38), IN46 | IN31)) | ((IN6 & IN11) | IN18)) | ((xor(xor(!(IN49), xor(xor(IN4, IN36), IN32)), xor(xor(IN18, IN24), IN30))) | ((IN19 | IN34) | (xor(xor(IN35, IN12), IN45))))))) & IN21)) & ((xor(xor((IN19 | IN26) & IN27, (xor(xor(xor(xor(IN7 | ((!(IN50)) | (xor(xor(IN9, IN33), IN2))), !(!(xor(xor(IN14, IN12), IN17)))), IN31), (!((!(IN39)) | (xor(xor(IN24, IN35), IN23)))) | (xor(xor((IN18 & IN8) & (xor(xor(IN46, IN25), IN35)), (IN17 & IN41) & false), xor(xor(!(IN15), xor(xor(IN34, IN35), IN1)), IN27 | IN35)))), xor(xor((xor(xor(xor(xor(IN24, IN41), IN40), IN5 | IN46), !(IN10))) & ((xor(xor(IN32, IN9), IN10)) | (IN32 & false)), xor(xor(xor(xor(!(IN32), IN15 | IN40), IN7 & IN30), (IN37 & IN11) & (IN19 | IN42)), !(!(IN46)))), IN2))) | ((!(!(!(IN23 & IN25)))) & IN39)), IN2)) | IN19)), !(!(IN5 & IN24)))
+
+*)
+
+FUNCTION_BLOCK F_CollectInput
+  VAR_IN_OUT
+      Data : ARRAY[1..50] OF BOOL;
+  END_VAR
+  VAR_INPUT
+      TICK  : BOOL := 0;
+      IN1   : BOOL := 0;
+      IN2   : BOOL := 0;
+      IN3   : BOOL := 0;
+      IN4   : BOOL := 0;
+      IN5   : BOOL := 0;
+      RESET : BOOL := FALSE;
+  END_VAR
+  VAR_OUTPUT
+      Finished : BOOL;
+  END_VAR
+  VAR
+      j    : USINT := 1;
+      tock : BOOL  := 0;
+  END_VAR
+  IF NOT RESET AND tock = NOT TICK THEN
+      Data[j]   := IN1;
+      Data[j+1] := IN2;
+      Data[j+2] := IN3;
+      Data[j+3] := IN4;
+      Data[j+4] := IN5;
+      j := j + 5;
+      tock := TICK;
+  ELSE
+      j := 1;
+      tock := 0;
+  END_IF;
+  Finished := (j > 50);
+END_FUNCTION_BLOCK
+
+
+PROGRAM Boiler
+  VAR
+    Data  : ARRAY[1..50] OF BOOL;
+    Ready : BOOL;
+    CollectInput : F_CollectInput;
+  END_VAR
+  VAR
+    TICK     AT %IX1.0 : BOOL;
+    IN1      AT %IX0.3 : BOOL;
+    IN2      AT %IX0.4 : BOOL;
+    IN3      AT %IX0.5 : BOOL;
+    IN4      AT %IX0.6 : BOOL;
+    IN5      AT %IX0.7 : BOOL;
+    OutReady AT %QX0.0 : BOOL := FALSE;
+    FeedNext AT %QX0.1 : BOOL := FALSE;
+    Out      AT %QX0.2 : BOOL;
+  END_VAR
+  CollectInput(TICK:=TICK, IN1:=IN1, IN2:=IN2, IN3:=IN3, IN4:=IN4, IN5:=IN5);
+  Ready := CollectInput.Finished;
+  FeedNext := 1;
+  IF Ready THEN
+    Out := (((((((NOT ((Data[1] XOR (NOT ((((Data[9] XOR FALSE) XOR Data[23]) OR (NOT Data[25])) AND Data[44]))) XOR ((NOT (Data[16] OR (Data[48] OR Data[3]))) AND ((NOT Data[24]) OR ((Data[45] OR Data[50]) AND ((TRUE XOR Data[37]) XOR Data[36])))))) OR (NOT ((Data[45] XOR (NOT (NOT (Data[24] OR ((Data[42] XOR Data[24]) XOR Data[37]))))) XOR (((Data[32] OR (((NOT Data[31]) XOR (Data[1] OR Data[43])) XOR (Data[50] AND Data[38]))) XOR (((NOT Data[37]) OR (Data[24] OR Data[12])) AND ((((Data[23] XOR Data[20]) XOR Data[44]) XOR (Data[3] AND Data[28])) XOR ((Data[4] XOR Data[33]) XOR Data[46])))) XOR (NOT ((Data[44] AND Data[24]) AND (NOT Data[26]))))))) XOR Data[48]) XOR (NOT ((Data[19] XOR Data[41]) XOR (Data[10] AND (((NOT ((Data[31] OR Data[33]) OR (NOT Data[2]))) XOR Data[49]) XOR (((Data[33] AND Data[10]) AND (NOT Data[46])) AND ((Data[48] XOR (NOT Data[17])) XOR (Data[17] OR Data[23])))))))) OR Data[35]) XOR ((NOT ((((((NOT (((NOT Data[13]) OR (Data[33] AND Data[11])) OR ((NOT Data[26]) AND (Data[31] AND Data[33])))) XOR (((Data[13] OR (Data[37] AND Data[1])) AND (Data[15] AND ((Data[18] XOR Data[36]) XOR Data[22]))) OR (NOT (Data[32] OR (Data[20] OR Data[32]))))) XOR (((((Data[43] XOR Data[21]) XOR FALSE) OR Data[15]) OR (((Data[8] XOR Data[50]) XOR Data[26]) OR ((Data[42] XOR Data[47]) XOR Data[44]))) OR ((NOT ((Data[45] XOR Data[2]) XOR Data[34])) OR ((NOT Data[9]) OR (NOT Data[18]))))) XOR (NOT (((NOT (((Data[42] XOR Data[48]) XOR Data[14]) AND (Data[12] OR Data[49]))) XOR Data[38]) XOR Data[46]))) XOR ((((Data[23] XOR ((NOT Data[16]) AND ((Data[30] AND Data[49]) OR ((Data[44] XOR Data[3]) XOR Data[22])))) XOR (NOT (NOT ((Data[5] XOR Data[31]) XOR Data[5])))) XOR (Data[13] OR (NOT ((NOT Data[7]) OR Data[1])))) XOR (((((Data[2] OR Data[24]) XOR (Data[44] AND Data[38])) XOR (Data[46] OR Data[31])) OR ((Data[6] AND Data[11]) OR Data[18])) OR ((((NOT Data[49]) XOR ((Data[4] XOR Data[36]) XOR Data[32])) XOR ((Data[18] XOR Data[24]) XOR Data[30])) OR ((Data[19] OR Data[34]) OR ((Data[35] XOR Data[12]) XOR Data[45])))))) AND Data[21])) AND (((((Data[19] OR Data[26]) AND Data[27]) XOR ((((((Data[7] OR ((NOT Data[50]) OR ((Data[9] XOR Data[33]) XOR Data[2]))) XOR (NOT (NOT ((Data[14] XOR Data[12]) XOR Data[17])))) XOR Data[31]) XOR ((NOT ((NOT Data[39]) OR ((Data[24] XOR Data[35]) XOR Data[23]))) OR ((((Data[18] AND Data[8]) AND ((Data[46] XOR Data[25]) XOR Data[35])) XOR ((Data[17] AND Data[41]) AND FALSE)) XOR (((NOT Data[15]) XOR ((Data[34] XOR Data[35]) XOR Data[1])) XOR (Data[27] OR Data[35]))))) XOR (((((((Data[24] XOR Data[41]) XOR Data[40]) XOR (Data[5] OR Data[46])) XOR (NOT Data[10])) AND (((Data[32] XOR Data[9]) XOR Data[10]) OR (Data[32] AND FALSE))) XOR (((((NOT Data[32]) XOR (Data[15] OR Data[40])) XOR (Data[7] AND Data[30])) XOR ((Data[37] AND Data[11]) AND (Data[19] OR Data[42]))) XOR (NOT (NOT Data[46])))) XOR Data[2])) OR ((NOT (NOT (NOT (Data[23] AND Data[25])))) AND Data[39]))) XOR Data[2]) OR Data[19]))) XOR (NOT (NOT (Data[5] AND Data[24]))));
+    OutReady := 1;
+    CollectInput(RESET:=TRUE);
+  END_IF;
+END_PROGRAM
+
+
+CONFIGURATION Config0
+  RESOURCE Res0 ON PLC
+    TASK task0(INTERVAL := T#20ms,PRIORITY := 0);
+    PROGRAM instance0 WITH task0 : Boiler;
+  END_RESOURCE
+END_CONFIGURATION
