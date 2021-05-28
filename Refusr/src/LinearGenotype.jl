@@ -2,6 +2,7 @@ module LinearGenotype
 
 using Printf
 
+using ..FF
 using ..Names
 using ..StructuredTextTemplate
 using ..Cockatrice.Evo
@@ -27,12 +28,14 @@ Base.@kwdef mutable struct Creature
     name::String
     generation::Int
     num_offspring::Int = 0
+    parents = nothing
+    likeness = nothing
 end
 
 
 function Creature(config::NamedTuple)
     len = rand(config.genotype.min_len:config.genotype.max_len)
-    chromosome = [rand_inst(ops=OPS, num_regs=NUM_REGS) for _ in 1:len]
+    chromosome = [rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=NUM_REGS) for _ in 1:len]
     fitness = Evo.init_fitness(config)
     Creature(chromosome=chromosome,
              effective_code=nothing,
@@ -93,7 +96,7 @@ end
 function mutate!(creature::Creature; config=nothing)
     inds = keys(creature.chromosome)
     i = rand(inds)
-    creature.chromosome[i] = rand_inst(ops=OPS, num_regs=NUM_REGS) # FIXME hardcoded
+    creature.chromosome[i] = rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=NUM_REGS) # FIXME hardcoded
     return
 end
 
@@ -109,10 +112,10 @@ OPS = [
 ]
 
 
-function rand_inst(;ops=OPS, num_regs=NUM_REGS)
+function rand_inst(;ops=OPS, num_data=NUM_REGS, num_regs=NUM_REGS)
     op, arity = rand(ops)
     dst = rand(1:num_regs)
-    src = rand(1:num_regs) * rand((1, -1))
+    src = rand(Bool) ? rand(1:num_regs) : -1 * rand(1:num_data)
     Inst(op, arity, dst, src)
 end
 
@@ -153,7 +156,7 @@ end
 
 OUTREGS = [1]
 
-function evaluate(g::Creature; data::Vector, trace=false)
+function FF.evaluate(g::Creature; data::Vector, trace=false)
     if g.effective_code === nothing
         g.effective_code = strip_introns(g.chromosome, OUTREGS)
     end
@@ -168,7 +171,7 @@ function evaluate(g::Creature; data::Vector, trace=false)
 end
 
 
-function parsimony(g::Creature)
+function FF.parsimony(g::Creature)
     len = length(g.chromosome)
     len == 0 ? -Inf : 1.0 / len
 end

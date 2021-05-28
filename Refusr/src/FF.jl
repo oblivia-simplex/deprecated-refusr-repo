@@ -1,9 +1,16 @@
 module FF
 
-#using ..TreeGenotype: evaluate, parsimony
-using ..LinearGenotype: evaluate, parsimony
+#import ..TreeGenotype: evaluate, parsimony
+#import ..LinearGenotype: evaluate, parsimony
 using FunctionWrappers: FunctionWrapper
 using Statistics, CSV, DataFrames, InformationMeasures, StatsBase
+using Memoize
+
+
+### Interface for FF-required functions
+parsimony(g) = error("unimplemented")
+evaluate(g; data, kwargs...) = error("unimplemented")
+###
 
 DATA = nothing
 
@@ -19,7 +26,12 @@ function _set_data(data::DataFrame)
     DATA = data
 end
 
-mutualinfo(a, b) = a == b ? 1.0 : get_mutual_information(a, b)
+
+@memoize Dict mutualinfo(a, b) = get_mutual_information(a,b) / get_entropy(a)
+
+function get_accuracy(answers, result)
+    1.0 - (answers .⊻ result|> sum) / length(answers)
+end
 
 function fit(g; config = nothing)
     global DATA
@@ -31,9 +43,9 @@ function fit(g; config = nothing)
         g.phenotype = [evaluate(g, data=collect(Bool, r[1:end-1])) for r in eachrow(DATA)]
     end
     answers = [r[end] for r in eachrow(DATA)]
-    mutinfo = round(mutualinfo(answers, g.phenotype), digits=4)
-    accuracy = 1.0 - (answers .⊻ g.phenotype |> sum) / length(answers)
-    g.fitness = [mutinfo, accuracy, p]
+    mutinfo = mutualinfo(answers, g.phenotype)
+    accuracy = get_accuracy(answers, g.phenotype) 
+    g.fitness = [accuracy, mutinfo, p]
     return g.fitness
 end
 
