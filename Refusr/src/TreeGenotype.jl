@@ -4,6 +4,7 @@ using StatsBase
 using FunctionWrappers: FunctionWrapper
 using Cockatrice
 
+using ..FF
 using ..Names
 using ..StructuredTextTemplate
 
@@ -15,11 +16,14 @@ Base.@kwdef mutable struct Creature
     generation::Any
     phenotype = nothing
     name::Any
+    parents = nothing
+    likeness = nothing
 end
 
 
 isterminal(e) = false
 
+isterminal(b::Bool) = true
 
 isterminal(e::Expr) = e.head === :ref
 
@@ -355,14 +359,15 @@ function mutate!(a::Creature; config = nothing)
 end
 
 
-function evaluate(g::Creature; data::Vector)
+function FF.evaluate(g::Creature; data::Vector)
     if g.program === nothing
         g.program = compile_chromosome(g.chromosome)
     end
     g.program(data)
 end
 
-function parsimony(g::Creature)
+
+function FF.parsimony(g::Creature)
     table = enumerate_expr(g.chromosome)
     len = length(table)
     len == 0 ? -Inf : 1.0 / len
