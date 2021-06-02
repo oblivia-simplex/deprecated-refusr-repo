@@ -16,11 +16,27 @@ function test_linear_gp(config)
         crossover = LinearGenotype.crossover
     )
 
-    steps = 100
+    steps = 500
     @info "Running $steps tournaments..."
     @showprogress for i in 1:steps
         do_step!(evoL)
     end
+
+    @show mean_fitness_1 = mean(filter(isfinite, evoL.trace["fitness_1"][end]))
+
+    @showprogress for i in 1:steps
+        do_step!(evoL)
+    end
+
+    @show mean_fitness_2 = mean(filter(isfinite, evoL.trace["fitness_1"][end]))
+
+    @test mean_fitness_2 >= mean_fitness_1
+
+    return evoL
+end
+
+
+function test_expr_equiv(evoL)
 
     same_expr_count = 0
     @info "Checking that expression identity implies phenotype identity..."
@@ -42,4 +58,5 @@ end
 
 
 
-test_linear_gp("test_config.yaml")
+evoL = test_linear_gp("test_config.yaml")
+test_expr_equiv(evoL)
