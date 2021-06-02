@@ -6,6 +6,7 @@ using ..FF
 using ..Names
 using ..StructuredTextTemplate
 using ..Cockatrice.Evo
+using ..Expressions
 
 
 NUM_REGS = 20
@@ -20,9 +21,42 @@ struct Inst
 end
 
 
+function to_expr(inst::Inst)
+    op = nameof(inst.op)
+    dst = :(R[$(inst.dst)])
+    src_t = inst.src < 0 ? :D : :R
+    src_i = abs(inst.src)
+    src = :($(src_t)[$(src_i)])
+    if inst.arity == 2
+        :($dst = $op($dst, $src))
+    elseif inst.arity == 1
+        :($dst = $op($src))
+    else # inst.arity == 0
+        :($dst = $(inst.op()))
+    end
+end
+
+DEFAULT_EXPR = :(R[1] = false)
+
+function to_expr(code::Vector{Inst})
+    code = strip_introns(code, [1])
+    isempty(code) && return DEFAULT_EXPR
+    expr = pop!(code) |> to_expr
+    @assert expr.head == :(=)
+    LHS, RHS = expr.args
+    while !isempty(code)
+        e = pop!(code) |> to_expr
+        @assert e.head == :(=)
+        lhs, rhs = e.args
+        Expressions.replace!(RHS, lhs=>rhs)
+    end
+    expr
+end
+        
+
 Base.@kwdef mutable struct Creature
     chromosome::Vector{Inst}
-    effective_code
+    effective_code::Union{Nothing, Vector{Inst}}
     phenotype
     fitness::Vector{Float64}
     name::String
@@ -103,7 +137,7 @@ end
 constant(c) = () -> c
 
 OPS = [
-    (⊻, 2),
+#    (⊻, 2),
     (|, 2),
     (&, 2),
     (!, 1),
@@ -179,7 +213,7 @@ end
 ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :! => "NOT"] |> Dict
 
 function st_inst(inst::Inst)
-    src = inst.src < 0 ? "Data[$(abs(inst.src))]" : "R[$(inst.src)]"
+    src = inst.src < 0 ? "D[$(abs(inst.src))]" : "R[$(inst.src)]"
     dst = "R[$(inst.dst)]"
     lhs = "$(dst) := "
     if inst.arity == 2

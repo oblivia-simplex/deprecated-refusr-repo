@@ -7,6 +7,8 @@ using Cockatrice
 using ..FF
 using ..Names
 using ..StructuredTextTemplate
+using ..Expressions
+
 
 
 Base.@kwdef mutable struct Creature
@@ -29,7 +31,7 @@ isterminal(e::Expr) = e.head === :ref
 
 
 function generate_input_variables(num)
-    [:(Data[$i]) for i = 1:num]
+    [:(D[$i]) for i = 1:num]
 end
 
 function generate_terminals(num)
@@ -50,7 +52,7 @@ function safeeval(e)
 end
 
 function compile_chromosome(expr::Expr)
-    :(Data -> $(expr)) |> safeeval |> FunctionWrapper{Bool,Tuple{Vector{Bool}}}
+    :(D -> $(expr)) |> safeeval |> FunctionWrapper{Bool,Tuple{Vector{Bool}}}
 end
 
 
@@ -135,7 +137,7 @@ end
 function evalwith(g, input)
     input = Bool.(input)
     eval(quote
-        let Data = $input
+        let D = $input
             return $g
         end
     end)
@@ -235,70 +237,6 @@ function expr_set!(expr::Expr, val, indices...)
     expr
 end
 
-
-function enumerate_expr!(table, path, expr::Expr; startat = 2)
-    if !isterminal(expr)
-        for (i, a) in enumerate(expr.args[startat:end])
-            if !isterminal(a)
-                p = [path..., (i + startat - 1)]
-                table[p] = a
-                enumerate_expr!(table, p, a, startat = startat)
-            end
-        end
-    end
-    table
-end
-
-
-function enumerate_expr(expr::Expr; startat = 2)
-    table = Dict()
-    path = []
-    table[[]] = expr
-    enumerate_expr!(table, path, expr, startat = startat)
-    table
-end
-
-function validate_path!(path::Vector, table::Dict)
-    if length(path) > 0 && isterminal(table[path])
-        pop!(path)
-        validate_path!(path, table)
-    else
-        path
-    end
-end
-
-
-function random_subexpr(e::Expr; maxdepth=8)
-    table = filter(x -> length(x) <= maxdepth, enumerate_expr(e))
-    if isempty(table)
-        return [], e
-    end
-    path = validate_path!(rand(keys(table)), table)
-    if isempty(path)
-        [], e
-    end
-    path, table[path]
-end
-
-
-function prune!(e::Expr, depth, terminals)
-    isterminal(e) && return
-    if depth <= 1
-        for i in 2:length(e.args)
-            if e.args[i] isa Expr
-                e.args[i] = rand(terminals).first
-            end
-        end
-    else
-        for arg in e.args[2:end]
-            prune!(arg, depth-1, terminals)
-        end
-    end
-end
-
-
-prune!(e, depth, terminals) = nothing
-
 # TODO: implement size-fair and/or homologous crossover
 # a la Langdon
 # TODO: how much of this can be done with immutables?
@@ -368,9 +306,8 @@ end
 
 
 function FF.parsimony(g::Creature)
-    table = enumerate_expr(g.chromosome)
-    len = length(table)
-    len == 0 ? -Inf : 1.0 / len
+    d = depth(g.chromosome)
+    iszero(d) ? 1.0 : 1.0 / d
 end
 
 
