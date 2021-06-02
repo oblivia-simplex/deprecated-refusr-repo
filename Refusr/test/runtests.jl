@@ -1,49 +1,45 @@
-include("../src/Generate.jl")
-
 using Test
+using ProgressMeter
+include("../src/base.jl")
 
 
-function generate_test_cases()
-    results = []
-    for ins in 2:6
-        this_iteration_terminals = vcat(TERMINALS[1:ins], TERMINALS[8:9])
-        this_iteration_terminals
-        for _ in 1:10
-            push!(results, grow(5, nonterminals=NONTERMINALS, terminals=this_iteration_terminals))
+mature(evo) = [g for g in evo.geo if g.phenotype !== nothing]
+
+function test_linear_gp(config)
+
+    evoL = Cockatrice.Evo.Evolution(
+        Cockatrice.Config.parse(config),
+        creature_type = LinearGenotype.Creature,
+        fitness = FF.fit,
+        tracers = TRACERS,
+        mutate = LinearGenotype.mutate!,
+        crossover = LinearGenotype.crossover
+    )
+
+    steps = 100
+    @info "Running $steps tournaments..."
+    @showprogress for i in 1:steps
+        do_step!(evoL)
+    end
+
+    same_expr_count = 0
+    @info "Checking that expression identity implies phenotype identity..."
+
+    mat = mature(evoL)
+    pairs = unique(x -> sort([g.name for g in x]),
+                   collect(Iterators.product(mat, mat)))
+
+    @showprogress for (g,h) in pairs
+        if g.name != h.name && LinearGenotype.to_expr(g.chromosome) == LinearGenotype.to_expr(h.chromosome)
+            same_expr_count += 1
+            @test g.phenotype == h.phenotype
         end
     end
-    return results
+
+    @info("Number of identical pairs of expressions in population: $(same_expr_count)")
+
 end
 
 
-for e in generate_test_cases()
-    table = truth_table(e, width=9)
-    irrelevant = check_for_juntas(table, expr=e)
-    @test length(irrelevant) > 0
-end
 
-
-function test_mux(ctrl_bits=3)
-    println("[+] Testing MUX with $ctrl_bits control bits")
-    m, controls, input = mux(ctrl_bits)
-    #table = truth_table(m, width=length(controls) + length(input))
-    map(0:(2^ctrl_bits-1)) do i
-        bs = bits(i, ctrl_bits)
-        assignments = map(zip(bs, controls)) do (b, ctrl)
-            b == 0 ? ctrl ← false : ctrl ← true
-        end
-        @show choice = input[i+1]
-        random_context = [p ← rand(Bool) for p in input if p.name ≠ choice.name]
-        for V in [true, false]
-            assignments = [vcat(assignments, random_context)..., choice ← V]
-            assertion = (m ⊃ choice) & (choice ⊃ m)
-            println("[+] Testing assertion: $(assertion)")
-            @test (Let(assignments, assertion) |> toexpr |> eval)
-        end
-    end
-end
-
-
-for i in 1:5
-    test_mux(i)
-end
+test_linear_gp("test_config.yaml")

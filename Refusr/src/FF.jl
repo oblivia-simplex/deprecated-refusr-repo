@@ -45,7 +45,7 @@ function fit(g; config = nothing)
     answers = [r[end] for r in eachrow(DATA)]
     mutinfo = mutualinfo(answers, g.phenotype)
     accuracy = get_accuracy(answers, g.phenotype) 
-    g.fitness = [accuracy, mutinfo, p]
+    g.fitness = [mutinfo, accuracy,  p]
     return g.fitness
 end
 
