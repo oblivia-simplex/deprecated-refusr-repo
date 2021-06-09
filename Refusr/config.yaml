@@ -1,4 +1,6 @@
-n_gen: 120
+experiment: "Testing"
+n_gen: 1200
+
 
 selection:
   fitness_function: "fit"

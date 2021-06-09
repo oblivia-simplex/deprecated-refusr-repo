@@ -29,7 +29,7 @@ end
 
 @memoize Dict mutualinfo(a, b) = get_mutual_information(a,b) / get_entropy(a)
 
-function get_accuracy(answers, result)
+function get_hamming(answers, result)
     1.0 - (answers .⊻ result|> sum) / length(answers)
 end
 
@@ -38,14 +38,13 @@ function fit(g; config = nothing)
     if DATA === nothing
         _set_data(config.selection.data)
     end
-    p = parsimony(g)
     if g.phenotype === nothing
         g.phenotype = [evaluate(g, data=collect(Bool, r[1:end-1])) for r in eachrow(DATA)]
     end
     answers = [r[end] for r in eachrow(DATA)]
     mutinfo = mutualinfo(answers, g.phenotype)
-    accuracy = get_accuracy(answers, g.phenotype) 
-    g.fitness = [mutinfo, accuracy,  p]
+    hamming = get_hamming(answers, g.phenotype) 
+    g.fitness = [mutinfo, hamming,  parsimony(g)]
     return g.fitness
 end
 
