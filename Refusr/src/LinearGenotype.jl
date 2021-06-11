@@ -205,10 +205,36 @@ function FF.evaluate(g::Creature; data::Vector, trace=false)
 end
 
 
-function FF.parsimony(g::Creature)
+# What if we define parsimony wrt the # of unnecessary instructions?
+
+function _parsimony(g::Creature)
     len = length(g.chromosome)
     len == 0 ? -Inf : 1.0 / len
 end
+
+
+function effective_parsimony(g::Creature)
+    if isnothing(g.effective_code)
+        g.effective_code = strip_introns(g.chromosome, [1])
+    end
+    length(g.effective_code) / length(g.chromosome)
+end
+
+
+function stepped_parsimony(g::Creature, threshold::Int)
+    len = length(g.chromosome)
+    if len == 0
+        -Inf
+    elseif len < threshold
+        1.0
+    else
+        1.0 / len
+    end
+end
+
+
+FF.parsimony(g::Creature) = stepped_parsimony(g, 100)
+
 
 ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :! => "NOT"] |> Dict
 

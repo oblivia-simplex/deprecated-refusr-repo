@@ -3,6 +3,8 @@ include("expressions.jl")
 
 CTX = Context()
 
+solver() = Solver(CTX, "QF_NRA")
+
 mk_consts(ctx, letter, num) = [bool_const(ctx, letter * string(i)) for i in 1:num]
 
 R = mk_consts(CTX, "R", 64)

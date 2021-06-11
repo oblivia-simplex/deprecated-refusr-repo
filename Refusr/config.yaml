@@ -1,5 +1,5 @@
-experiment: "Testing"
-n_gen: 1200
+experiment: "effective-parsimony"
+n_gen: 2400
 
 
 selection:
