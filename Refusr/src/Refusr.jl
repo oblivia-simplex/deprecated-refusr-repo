@@ -2,7 +2,14 @@ using Distributed
 
 
 if nprocs() == 1
-    addprocs(4, topology=:master_worker, exeflags="--project=$(Base.active_project())")
+    p = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 4
+    addprocs(p, topology=:master_worker, exeflags="--project=$(Base.active_project())")
+else
+    @everywhere begin
+        using Pkg
+        Pkg.activate("$(@__DIR__)/..")
+        Pkg.instantiate()
+    end
 end
 
 @everywhere begin
