@@ -140,7 +140,7 @@ OPS = [
 #    (⊻, 2),
     (|, 2),
     (&, 2),
-    (!, 1),
+    (~, 1),
     (constant(true), 0),
     (constant(false), 0),
 ]
@@ -236,7 +236,7 @@ end
 FF.parsimony(g::Creature) = stepped_parsimony(g, 100)
 
 
-ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :! => "NOT"] |> Dict
+ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :~ => "NOT"] |> Dict
 
 function st_inst(inst::Inst)
     src = inst.src < 0 ? "D[$(abs(inst.src))]" : "R[$(inst.src)]"
