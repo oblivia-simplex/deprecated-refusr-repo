@@ -1,10 +1,10 @@
-experiment: "effective-parsimony"
-n_gen: 2400
+experiment: "example"
+n_gen: 1000
 
 
 selection:
   fitness_function: "fit"
-  data: "samples/3-MUX_slums-noted-letup_2048.csv"
+  data: "./samples/2-MUX_overs-cohos-orbed_ALL.csv"
   d_fitness: 3
   t_size: 6
 
@@ -16,7 +16,7 @@ genotype:
   mutation_rate: 0.1
 
 population:
-  size: [40, 40]
+  size: [20, 20]
   toroidal: true
   locality: 16
   n_elites: 10
@@ -24,5 +24,5 @@ population:
   migration_type: "elite"
 
 logging:
-  log_every: 5
+  log_every: 1
   save_every: 50

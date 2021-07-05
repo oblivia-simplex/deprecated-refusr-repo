@@ -289,6 +289,7 @@ end
 end
 
 module ST
+
 using CSV
 using ..Expressions: variables_used_upper_bound, MUX, truth_table
 using ....StructuredTextTemplate

@@ -17,8 +17,12 @@ DATA = nothing
 function _set_data(data::String; samplesize=1000)
     global DATA
     data = CSV.read(data, DataFrame)
-    rows = sample(1:size(data,1), samplesize, replace=false)
-    DATA = data[rows, :]
+    if DataFrames.nrow(data) <= samplesize
+        DATA = data
+    else
+        rows = sample(1:size(data,1), samplesize, replace=false)
+        DATA = data[rows, :]
+    end
 end
 
 function _set_data(data::DataFrame)
@@ -44,7 +48,7 @@ function fit(g; config = nothing)
     answers = [r[end] for r in eachrow(DATA)]
     mutinfo = mutualinfo(answers, g.phenotype)
     hamming = get_hamming(answers, g.phenotype) 
-    g.fitness = [mutinfo, hamming,  parsimony(g)]
+    g.fitness = [mutinfo, hamming, parsimony(g)]
     return g.fitness
 end
 
