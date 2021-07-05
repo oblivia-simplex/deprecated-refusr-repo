@@ -41,20 +41,6 @@ function generate_terminals(num)
 end
 
 
-function safeeval(e)
-    try
-        eval(e)
-    catch exception
-        @error exception
-        println("The expression was: $(e)")
-        false
-    end
-end
-
-function compile_chromosome(expr::Expr)
-    :(D -> $(expr)) |> safeeval |> FunctionWrapper{Bool,Tuple{Vector{Bool}}}
-end
-
 
 function Creature(config::NamedTuple)
     terminals = generate_terminals(config.genotype.inputs_n)
@@ -76,40 +62,6 @@ end
 
 NONTERMINALS = [:& => 2, :| => 2, :~ => 1]
 
-ST_TRANS = [:& => "AND", :| => "OR", :~ => "NOT"] |> Dict
-
-
-function structured_text_expr(expr::Expr)
-    if expr.head === :ref
-        return string(expr)
-    elseif expr.head === :call
-        op = ST_TRANS[expr.args[1]]
-        args = expr.args[2:end]
-        if length(args) == 2
-            a, b = structured_text_expr.(args)
-            return "($(a) $(op) $(b))"
-        else
-            a = structured_text_expr(args[1])
-            return "($(op) $(a))"
-        end
-    end
-end
-
-
-function structured_text_expr(terminal::Bool)
-    repr(terminal) |> uppercase
-end
-
-
-function structured_text(expr; config=nothing, comment = "")
-    inputsize = config.genotype.inputs_n
-    st = expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
-    if length(comment) > 0
-        return "(*\n$(comment)\n*)\n\n$(st)"
-    else
-        return st
-    end
-end
 
 function grow(depth, max_depth, terminals, nonterminals, bushiness)
     nodes = [terminals; nonterminals]
@@ -134,84 +86,8 @@ function grow(
     grow(0, max_depth, terminals, nonterminals, bushiness)
 end
 
-function evalwith(g, input)
-    input = Bool.(input)
-    eval(quote
-        let D = $input
-            return $g
-        end
-    end)
-end
 
 
-function variables_used!(acc, expr::Expr)
-    if expr.head === :ref
-        push!(acc, expr)
-    else
-        for x in expr.args[2:end]
-            variables_used!(acc, x)
-        end
-    end
-end
-
-variables_used!(acc, literal::Bool) = nothing
-
-function variables_used(expr)
-    acc = []
-    variables_used!(acc, expr)
-    sort!(acc, by = s -> s.args[2])
-    unique!(acc)
-    acc
-end
-
-function bits(n, num_bits)
-    n = UInt128(n)
-    [(n & UInt128(1) << i != 0) for i = 0:(num_bits-1)]
-end
-
-
-function truth_table(expr; width = nothing, samplesize::Union{Symbol,Int} = :ALL)
-    # Sampling without replacement fails when the sample ranges over integers larger
-    # than 64 bits in width
-    if isnothing(width)
-        used = [a.args[2] for a in variables_used(expr)] |> maximum
-        variables = generate_input_variables(used)
-        width = length(variables)
-    else
-        variables = generate_input_variables(width)
-    end
-    width = UInt128(width)
-    use_replacement = (width > 60)
-    range = UInt128(0):(UInt128(2)^width-1)
-    if samplesize === :ALL || samplesize == 1.0
-        samplesize = length(range) |> Int128
-        sampling = range
-    else
-        if samplesize isa Float64 && samplesize < 1.0
-            samplesize = (samplesize * length(range)) |> UInt128
-        end
-        sampling = sample(range, samplesize, replace = use_replacement) |> sort
-    end
-    threadrows = []
-    for i = 1:Threads.nthreads()
-        push!(threadrows, [])
-    end
-    Threads.@threads for i in sampling
-        values = bits(i, width)
-        output = evalwith(expr, values)
-        row = [values..., output]
-        push!(threadrows[Threads.threadid()], row)
-        binstr = [x ? '1' : '0' for x in row] |> String
-        println(binstr)
-    end
-    rows = vcat(threadrows...)
-    table = DataFrame([[string(i) => 0 for i in variables]..., "OUT" => 0])
-    table[1, :] = rows[1]
-    for row in rows[2:end]
-        push!(table, row)
-    end
-    table
-end
 
 
 function expr_index(expr::Expr, indices...)
@@ -299,7 +175,7 @@ end
 
 function FF.evaluate(g::Creature; data::Vector)
     if g.program === nothing
-        g.program = compile_chromosome(g.chromosome)
+        g.program = compile_expression(g.chromosome)
     end
     g.program(data)
 end

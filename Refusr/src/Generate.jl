@@ -342,6 +342,39 @@ function mux(ctrl_bits; vars = nothing, shuffle = true)
     return m, controls, input
 end
 
+function generate_files(
+    sexp;
+    name = nothing,
+    tablewidth = 50,
+    comment = "",
+    dir = ".",
+    samplesize = 10000,
+)
+
+    if isnothing(name)
+        name = "RND-EXPR_" * Names.rand_name(3)
+    end
+
+    st = structured_text(sexp, comment = comment, inputsize = tablewidth)
+
+    println(st)
+
+    table = truth_table(sexp, samplesize = samplesize, width = tablewidth)
+
+    csv_path = "$(dir)/$(name)_$(samplesize).csv"
+    st_path = "$(dir)/$(name).st"
+    sexp_path = "$(dir)/$(name).sexp"
+
+    println("[+] Saving symbolic expression to $sexp_path")
+    write(sexp_path, repr(sexp))
+    println("[+] Saving CSV to $csv_path")
+    CSV.write(csv_path, table)
+    println("[+] Saving ST code to $st_path")
+    write(st_path, st)
+
+    return sexp, table, st
+end
+
 
 function generate_mux_code_and_sample(ctrl_bits; dir = ".", samplesize = 10000)
     name = "$(ctrl_bits)-MUX_" * Names.rand_name(3)
