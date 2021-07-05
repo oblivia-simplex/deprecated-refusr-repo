@@ -1,6 +1,8 @@
 module LinearGenotype
 
 using Printf
+import JSON
+import Base.isequal
 
 using ..FF
 using ..Names
@@ -9,7 +11,7 @@ using ..Cockatrice.Evo
 using ..Expressions
 
 
-NUM_REGS = 20
+NUM_REGS = 11
 RegType = Bool
 
 struct Inst
@@ -19,6 +21,39 @@ struct Inst
     dst::Int
     src::Int
 end
+
+
+Base.isequal(a::Inst, b::Inst) = (a.op == b.op
+                                  && a.arity == b.arity
+                                  && a.dst == b.dst
+                                  && a.src == b.src)
+
+
+function Inst(d::Dict)
+    op = d["op"] isa Number ? constant(d["op"]) : eval(Symbol(d["op"]))
+    Inst(op, d["arity"], d["dst"], d["src"])
+end
+
+
+
+
+function serialize_op(inst::Inst)
+    if inst.arity == 0
+        inst.op()
+    else
+        nameof(inst.op)
+    end
+end
+
+function JSON.lower(inst::Inst)
+    (op = serialize_op(inst),
+     arity = inst.arity,
+     dst = inst.dst,
+     src = inst.src)
+end
+
+
+
 
 
 function to_expr(inst::Inst)
@@ -67,6 +102,7 @@ Base.@kwdef mutable struct Creature
 end
 
 
+
 function Creature(config::NamedTuple)
     len = rand(config.genotype.min_len:config.genotype.max_len)
     chromosome = [rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=NUM_REGS) for _ in 1:len]
@@ -77,6 +113,32 @@ function Creature(config::NamedTuple)
              fitness=fitness,
              name=Names.rand_name(4),
              generation=0)
+end
+
+
+function Creature(d::Dict)
+
+    Creature(
+        chromosome = Inst.(d["chromosome"]),
+        effective_code = isnothing(d["effective_code"]) ? nothing : Inst.(d["effective_code"]),
+        phenotype = d["phenotype"],
+        fitness = Vector{Float64}([isnothing(x) ? -Inf : x for x in d["fitness"]]),
+        name = d["name"],
+        generation = d["generation"],
+        num_offspring = d["num_offspring"],
+        parents = d["parents"],
+        likeness = d["likeness"],
+    )
+
+end
+
+
+function serialize_creature(g::Creature)
+    JSON.json(g)
+end
+
+function deserialize_creature(s::String)
+    JSON.parse(s) |> Creature
 end
 
 
@@ -135,6 +197,7 @@ function mutate!(creature::Creature; config=nothing)
 end
 
 constant(c) = () -> c
+
 
 OPS = [
 #    (⊻, 2),

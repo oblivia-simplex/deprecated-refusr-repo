@@ -6,7 +6,7 @@ function __init__()
     copy!(z3, pyimport("z3"))
 end
 
-include("expressions.jl")
+include("Expressions.jl")
 
 mk_var(prefix, i) = z3.BitVec(prefix * string(i), 1)
 mk_const(b::Bool) = z3.BitVecVal(b, 1)

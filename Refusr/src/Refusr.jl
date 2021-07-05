@@ -1,5 +1,5 @@
 using Distributed
-
+using CSV, DataFrames
 
 if nprocs() == 1
     p = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 4
@@ -49,6 +49,7 @@ end
 
 function launch(config_path)
     config = Config.parse(config_path)
+    data = CSV.read(config.selection.data, DataFrame)
     fitness_function = Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     @assert fitness_function isa Function
     E, table = Cosmos.δ_run(config=config,

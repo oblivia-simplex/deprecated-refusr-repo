@@ -6,7 +6,7 @@ using Statistics
 include("Names.jl")
 include("StructuredTextTemplate.jl")
 include("FF.jl")
-include("expressions.jl")
+include("Expressions.jl")
 include("TreeGenotype.jl")
 include("LinearGenotype.jl")
 include("step.jl")
