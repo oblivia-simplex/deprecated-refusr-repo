@@ -4,7 +4,7 @@ n_gen: 2400
 
 selection:
   fitness_function: "fit"
-  data: "samples/RND-EXPR_emote-trout-maybe_10000.csv"
+  data: "samples/3-MUX_slums-noted-letup_2048.csv"
   d_fitness: 3
   t_size: 6
 
