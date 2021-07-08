@@ -1,5 +1,4 @@
-experiment: "example"
-n_gen: 1000
+n_gen: 10000
 
 
 selection:
@@ -12,11 +11,11 @@ genotype:
   max_depth: 8
   min_len: 4
   max_len: 500
-  inputs_n: 50
+  inputs_n: 7
   mutation_rate: 0.1
 
 population:
-  size: [20, 20]
+  size: [15, 15]
   toroidal: true
   locality: 16
   n_elites: 10

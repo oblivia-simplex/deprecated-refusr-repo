@@ -292,8 +292,8 @@ module ST
 
 using CSV
 using ..Expressions: variables_used_upper_bound, MUX, truth_table
-using ....StructuredTextTemplate
-using ....Names
+include("StructuredTextTemplate.jl")
+include("Names.jl")
 
 ST_TRANS = [:& => "AND", :| => "OR", :~ => "NOT"] |> Dict
 

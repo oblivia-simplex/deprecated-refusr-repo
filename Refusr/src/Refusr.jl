@@ -1,5 +1,6 @@
 using Distributed
 using CSV, DataFrames
+using Setfield
 
 if nprocs() == 1
     p = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 4
@@ -50,6 +51,10 @@ end
 function launch(config_path)
     config = Config.parse(config_path)
     data = CSV.read(config.selection.data, DataFrame)
+    n_inputs = ncol(data)
+    @set config.genotype.inputs_n = n_inputs
+    LinearGenotype._set_NUM_REGS(n_inputs)
+    
     fitness_function = Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     @assert fitness_function isa Function
     E, table = Cosmos.δ_run(config=config,
@@ -60,7 +65,6 @@ function launch(config_path)
                             tracers=TRACERS,
                             loggers=LOGGERS,
                             )
-    ## TODO: Actually log that table. 
 end
 
 

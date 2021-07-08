@@ -11,7 +11,12 @@ using ..Cockatrice.Evo
 using ..Expressions
 
 
-NUM_REGS = 11
+NUM_REGS = 8
+function _set_NUM_REGS(n)
+    global NUM_REGS
+    NUM_REGS = n
+end
+
 RegType = Bool
 
 struct Inst
@@ -102,6 +107,11 @@ Base.@kwdef mutable struct Creature
 end
 
 
+function random_program(n; ops=OPS, num_data=NUM_REGS, num_regs=NUM_REGS)
+    [rand_inst(ops=ops, num_data=num_data, num_regs=num_regs) for _ in 1:n]
+end
+    
+
 
 function Creature(config::NamedTuple)
     len = rand(config.genotype.min_len:config.genotype.max_len)
@@ -121,7 +131,7 @@ function Creature(d::Dict)
     Creature(
         chromosome = Inst.(d["chromosome"]),
         effective_code = isnothing(d["effective_code"]) ? nothing : Inst.(d["effective_code"]),
-        phenotype = d["phenotype"],
+        phenotype = isnothing(d["phenotype"]) ? nothing : (results = Vector{Bool}(d["phenotype"]["results"]), trace = BitArray(d["phenotype"]["trace"])),
         fitness = Vector{Float64}([isnothing(x) ? -Inf : x for x in d["fitness"]]),
         name = d["name"],
         generation = d["generation"],
@@ -196,7 +206,10 @@ function mutate!(creature::Creature; config=nothing)
     return
 end
 
-constant(c) = () -> c
+constant(c) = c ? truth : falsity
+
+truth() = true
+falsity() = false
 
 
 OPS = [
@@ -204,8 +217,8 @@ OPS = [
     (|, 2),
     (&, 2),
     (~, 1),
-    (constant(true), 0),
-    (constant(false), 0),
+    (truth, 0),
+    (falsity, 0),
 ]
 
 
@@ -219,7 +232,7 @@ end
 
 @inline I(ar,i) = ar[mod1(abs(i), length(ar))]
 
-function evaluate_inst!(;regs::Vector, data::Vector, inst::Inst)
+function evaluate_inst!(;regs, data, inst)
     s_regs = inst.src < 0 ? data : regs
     d_regs = regs
     if inst.arity == 2
@@ -253,18 +266,33 @@ end
 
 OUTREGS = [1]
 
-function FF.evaluate(g::Creature; data::Vector, trace=false)
+MAX_STEPS = 512
+
+function execute(code, data; make_trace=true)
+    regs = zeros(RegType, NUM_REGS)
+    trace_len = min(length(code), MAX_STEPS) # Assuming no loops
+    trace = zeros(RegType, NUM_REGS, trace_len) |> BitArray
+    pc = 1
+    steps = 0
+    len = length(code)
+    while steps <= MAX_STEPS && pc <= len
+        inst = code[pc]
+        evaluate_inst!(regs=regs, data=data, inst=inst)
+        if make_trace
+            trace[:, pc] .= regs
+        end
+        pc += 1
+        steps += 1
+    end
+    regs[OUTREGS][1], trace
+end
+
+
+function FF.evaluate(g::Creature; data::Vector, make_trace=true)
     if g.effective_code === nothing
         g.effective_code = strip_introns(g.chromosome, OUTREGS)
     end
-    regs = zeros(RegType, NUM_REGS)
-    for inst in g.effective_code
-        if trace
-            println("$(inst)")
-        end
-        evaluate_inst!(regs=regs, data=data, inst=inst)
-    end
-    regs[OUTREGS][1] # KLUDGE
+    execute(g.effective_code, data, make_trace=make_trace)
 end
 
 
