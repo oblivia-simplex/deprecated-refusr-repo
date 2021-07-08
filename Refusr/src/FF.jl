@@ -14,10 +14,10 @@ evaluate(g; data, kwargs...) = error("unimplemented")
 
 DATA = nothing
 
-function _set_data(data::String; samplesize=1000)
+function _set_data(data::String; samplesize=:ALL)
     global DATA
     data = CSV.read(data, DataFrame)
-    if DataFrames.nrow(data) <= samplesize
+    if samplesize === :ALL || DataFrames.nrow(data) <= samplesize
         DATA = data
     else
         rows = sample(1:size(data,1), samplesize, replace=false)

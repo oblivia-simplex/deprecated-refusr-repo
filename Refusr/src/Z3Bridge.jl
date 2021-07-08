@@ -1,4 +1,8 @@
 #using Z3
+module Z3Bridge
+
+using ..Expressions
+
 using PyCall
 z3 = pyimport("z3")
 
@@ -6,7 +10,6 @@ function __init__()
     copy!(z3, pyimport("z3"))
 end
 
-include("Expressions.jl")
 
 mk_var(prefix, i) = z3.BitVec(prefix * string(i), 1)
 mk_const(b::Bool) = z3.BitVecVal(b, 1)
@@ -82,3 +85,5 @@ function simplify(e::Expr)
 end
 
 simplify(x) = x
+
+end # end module

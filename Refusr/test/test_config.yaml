@@ -1,4 +1,4 @@
-n_gen: 120
+experiment_duration: 120
 
 selection:
   fitness_function: "fit"

@@ -24,7 +24,6 @@ end
     using Dates
 
     include("$(@__DIR__)/base.jl")
-    const Genotype = LinearGenotype
     @info "Environment ready."
 
 end
@@ -41,35 +40,39 @@ function init(;config_path="./config.yaml", fitness=nothing, tracers=TRACERS)
     end
     Cosmos.δ_init(config=config,
                   fitness=fitness,
-                  crossover=Genotype.crossover,
-                  mutate=Genotype.mutate!,
-                  creature_type=Genotype.Creature,
+                  crossover=LinearGenotype.crossover,
+                  mutate=LinearGenotype.mutate!,
+                  creature_type=LinearGenotype.Creature,
                   tracers=tracers)
 end
 
 
-function launch(config_path)
+## FIXME: again, objective performance should be cached, probably
+@everywhere stopping_condition(evo) = (objective_performance.(evo.geo.deme) |> maximum) == 1.0
+
+function launch(config_path; single_process=false)
     config = Config.parse(config_path)
     data = CSV.read(config.selection.data, DataFrame)
     n_inputs = ncol(data)
     @set config.genotype.inputs_n = n_inputs
-    LinearGenotype._set_NUM_REGS(n_inputs)
+    @everywhere LinearGenotype._set_NUM_REGS($n_inputs)
     
     fitness_function = Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     @assert fitness_function isa Function
-    E, table = Cosmos.δ_run(config=config,
-                            fitness=fitness_function,
-                            creature_type=Genotype.Creature,
-                            crossover=Genotype.crossover,
-                            mutate=Genotype.mutate!,
-                            tracers=TRACERS,
-                            loggers=LOGGERS,
-                            )
+
+    params = [:config => config,
+              :fitness => fitness_function,
+              :creature_type => LinearGenotype.Creature,
+              :crossover => LinearGenotype.crossover,
+              :mutate => LinearGenotype.mutate!,
+              :tracers => TRACERS,
+              :loggers => LOGGERS,
+              :stopping_condition => stopping_condition,
+              :objective_performance => objective_performance,
+              ]
+    if single_process
+        E, table = Cosmos.run(params...)
+    else
+        E, table = Cosmos.δ_run(params...)
+    end
 end
-
-
-if !isinteractive()
-    config = length(ARGS) > 0 ? ARGS[1] : "./config.yaml"
-    launch(config)
-end
-

@@ -10,6 +10,7 @@ include("FF.jl")
 include("TreeGenotype.jl")
 include("LinearGenotype.jl")
 include("step.jl")
+include("Z3Bridge.jl")
 
 meanfinite(s) = mean(filter(isfinite, s))
 stdfinite(s) = std(filter(isfinite, s))
@@ -23,8 +24,12 @@ function objective_performance(g)
     if g.phenotype === nothing
         return -Inf
     end
+    if g.performance !== nothing
+        return g.performance
+    end
+
     correct = (!).(g.phenotype.results .⊻ FF.get_answers(FF.DATA))
-    mean(correct)
+    g.performance = mean(correct)
 end
 
 TRACERS = [
