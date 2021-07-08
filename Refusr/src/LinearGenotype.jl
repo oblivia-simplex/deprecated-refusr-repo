@@ -274,8 +274,7 @@ function execute(code, data; make_trace=true)
     trace = zeros(RegType, NUM_REGS, trace_len) |> BitArray
     pc = 1
     steps = 0
-    len = length(code)
-    while steps <= MAX_STEPS && pc <= len
+    while steps <= MAX_STEPS && pc <= trace_len
         inst = code[pc]
         evaluate_inst!(regs=regs, data=data, inst=inst)
         if make_trace
