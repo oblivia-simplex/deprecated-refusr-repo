@@ -87,7 +87,9 @@ function fit(geo, g)
     # FIXME: refactor so that the interaction matrix is held as a field of Geo
     # and is updated only as needed, IF that turns out to be faster. It might not
     # be, as julia is really rather quick with its array and matrix operations.
-    interaction_matrix = build_interaction_matrix(geo)
+    interaction_matrix = (geo.config.selection.fitness_sharing ?
+                          build_interaction_matrix(geo)
+                          : nothing)
     if g.phenotype === nothing
         results, trace = [evaluate(g, data=collect(Bool, r[1:end-1])) for r in eachrow(DATA)] |> unzip
         g.phenotype = (results = results, trace = trace)
