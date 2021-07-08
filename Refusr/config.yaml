@@ -1,4 +1,4 @@
-n_gen: 10000
+experiment_duration: 1000
 
 
 selection:

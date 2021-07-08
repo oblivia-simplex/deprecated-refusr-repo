@@ -129,7 +129,6 @@ ortrue_p(e::Expr) = (e.head === :call && e.args[1] === :| && true ∈ e.args)
 ortrue_p(e) = false
 
 true_absorption(e::Expr) = Base.replace(e, ortrue_p=>true)
-false_absorption(e::Expr) = Base.replace(e, andfalse_p=>false)
 
 isnot(e::Expr) = (e.head === :call && e.args[1] === :!)
 isnot(e) = false

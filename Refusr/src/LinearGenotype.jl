@@ -104,6 +104,44 @@ Base.@kwdef mutable struct Creature
     num_offspring::Int = 0
     parents = nothing
     likeness = nothing
+    performance = nothing
+end
+
+
+function summarize(g::Creature)
+    symbolic_str = to_expr(g.chromosome) |> string
+    chrom_str = join(map(string, g.chromosome), "\n")
+    effec_str = isnothing(g.effective_code) ? "" : join(map(string, g.effective_code), "\n")
+
+    pheno_str = isnothing(g.phenotype) ? "" : """
+Phenotype.Results:
+
+$(g.phenotype.results)
+
+Phenotype.Trace:
+
+$(g.phenotype.trace)
+"""
+
+"""
+Name: $(g.name)
+
+Symbolic Expression: $(symbolic_str)
+
+Chromosome:
+$(chrom_str)
+
+Effective Code:
+$(effec_str)
+
+$(pheno_str)
+
+Parents: $(g.parents)
+
+Fitness: $(g.fitness)
+
+Performance: $(g.performance)
+"""
 end
 
 
@@ -138,6 +176,7 @@ function Creature(d::Dict)
         num_offspring = d["num_offspring"],
         parents = d["parents"],
         likeness = d["likeness"],
+        performance = d["performance"],
     )
 
 end
