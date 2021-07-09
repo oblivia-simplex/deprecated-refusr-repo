@@ -71,8 +71,8 @@ function launch(config_path; single_process=false)
               :objective_performance => objective_performance,
               ]
     if single_process
-        E, table = Cosmos.run(params...)
+        Cosmos.run(;params...)
     else
-        E, table = Cosmos.δ_run(params...)
+        Cosmos.δ_run(;params...)
     end
 end

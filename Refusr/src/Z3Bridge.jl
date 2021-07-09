@@ -8,6 +8,10 @@ z3 = pyimport("z3")
 
 function __init__()
     copy!(z3, pyimport("z3"))
+    # We need to make sure that no ellipses are used in the string conversions
+    z3.z3printer._PP.bounded = false
+    z3.z3printer._PP.max_width = 999999999
+    z3.z3printer._PP.max_lines = 999999999
 end
 
 
@@ -30,8 +34,8 @@ function translate_with_bools!(e::Expr)::Expr
     replace!(e, :& => :(z3.And))
     replace!(e, :| => :(z3.Or))
     replace!(e, :~ => :(z3.Not))
-    replace!(e, :true => mk_const_bool(true))
-    replace!(e, :false => mk_const_bool(false))
+    #replace!(e, :true => mk_const_bool(true))
+    #replace!(e, :false => mk_const_bool(false))
     e
 end
 
@@ -64,7 +68,7 @@ function expr_to_z3(e::Expr)
 end
 
 function z3_to_expr(z::PyObject)
-    e = z.__str__() |> Meta.parse
+    e = z3.obj_to_string(z) |> Meta.parse
     if e isa Expr
         # Needed for Bool variants only
         replace!(e, :Not => :~)
