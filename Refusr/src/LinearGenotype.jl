@@ -11,7 +11,8 @@ using ..Cockatrice.Evo
 using ..Expressions
 
 
-NUM_REGS = 8
+NUM_REGS = 6
+
 function _set_NUM_REGS(n)
     global NUM_REGS
     NUM_REGS = n
@@ -90,7 +91,8 @@ function to_expr(code::Vector{Inst})
         lhs, rhs = e.args
         Expressions.replace!(RHS, lhs=>rhs)
     end
-    expr
+    Expressions.replace!(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
+    RHS
 end
         
 

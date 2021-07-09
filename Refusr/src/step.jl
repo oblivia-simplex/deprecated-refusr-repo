@@ -19,7 +19,7 @@ function do_step!(evo)
         iszero(e) ? m : m / e
     end
     if !isnothing(FF.DATA)
-        interaction_matrix = FF.build_interaction_matrix(evo)
+        interaction_matrix = FF.build_interaction_matrix(evo.geo)
     else
         interaction_matrix = nothing
     end

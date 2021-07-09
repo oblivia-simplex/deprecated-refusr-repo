@@ -70,7 +70,22 @@ passes(e) = isnothing(e.phenotype) ? BitArray(rand(Bool, nrow(DATA))) : (~).(e.p
 ## TODO maintain this as a field of the Geo object, and update it in a piecemeal
 ## way, as needed. No need to reevaluate every row, every step.
 function build_interaction_matrix(geo)
-	  hcat(passes.(reshape(geo.deme, prod(size(geo.deme))))...)
+    if !isnothing(geo.interaction_matrix)
+        geo.interaction_matrix
+    else
+	      geo.interaction_matrix = hcat(passes.(reshape(geo.deme, prod(size(geo.deme))))...)
+    end
+end
+
+## NOTE on translating coordinates:
+# A[(i[2]-1)*(size(A,1))+i[1]] == A[i...]
+
+function update_interaction_matrix!(geo, index, out_vec)
+    if geo.interaction_matrix === nothing
+        geo.interaction_matrix = build_interaction_matrix(geo)
+    end
+    flat_index = (index[2]-1) * size(geo.deme,1) + index[1]
+    geo.interaction_matrix[:, flat_index] .= (!).(out_vec .⊻ get_answers(DATA))
 end
 
 function get_difficulty(interaction_matrix, row_index)
@@ -78,8 +93,9 @@ function get_difficulty(interaction_matrix, row_index)
 end
 
 
-function fit(geo, g)
+function fit(geo, i)
     global DATA
+    g = geo.deme[i]
     config = geo.config
     if DATA === nothing
         _set_data(config.selection.data)
@@ -100,6 +116,7 @@ function fit(geo, g)
     answers = get_answers(DATA)
     mutinfo = mutualinfo(answers, g.phenotype.results)
     hamming = get_hamming(answers, g.phenotype.results, IM=interaction_matrix) 
+    update_interaction_matrix!(geo, i, g.phenotype.results)
     # Variety measures how different the program behaves with respect to input
     # variety = length(unique(g.phenotype.trace)) / length(g.phenotype.trace)
     g.fitness = [hamming, mutinfo, parsimony(g)]

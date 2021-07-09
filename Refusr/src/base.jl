@@ -67,6 +67,6 @@ LOGGERS = [
 
 
 ## To facilitate debugging
-mkevo() = Cockatrice.Evo.Evolution(Cockatrice.Config.parse("./config.yaml"), creature_type=LinearGenotype.Creature, fitness=FF.fit, tracers=TRACERS, mutate=LinearGenotype.mutate!, crossover=LinearGenotype.crossover)
+mkevo() = Cockatrice.Evo.Evolution(Cockatrice.Config.parse("./config.yaml"), creature_type=LinearGenotype.Creature, fitness=FF.fit, tracers=TRACERS, mutate=LinearGenotype.mutate!, crossover=LinearGenotype.crossover, objective_performance=objective_performance)
 
 

@@ -4,6 +4,9 @@ module Expressions
 using DataFrames
 using StatsBase
 using FunctionWrappers: FunctionWrapper
+using Espresso # Espresso actually implements some of the features
+# we already have here, but I think my implementation is faster.
+# It does seem much better for simplification, though. 
 
 export replace!, replace, count_subexpressions, enumerate_expr, truth_table, compile_expression
 
@@ -118,28 +121,19 @@ prune!(e, depth, terminals) = nothing
 # Rewriting rules
 
 
-andfalse_p(e::Expr) = (e.head === :call && e.args[1] === :& && false ∈ e.args)
+@simple_rule ~~x              x
+@simple_rule (false & x)      false
+@simple_rule (true | x)       true
+@simple_rule (false | x)      x
+@simple_rule (true & x)       x
+@simple_rule ~(x & y)         (~x | ~y)
+@simple_rule ~(x | y)         (~x & ~y)
+@simple_rule (x | x)          x
+@simple_rule (x & x)          x
 
-andfalse_p(e) = false
 
-false_absorption(e::Expr) = Base.replace(e, andfalse_p=>false, all=true)
 
-ortrue_p(e::Expr) = (e.head === :call && e.args[1] === :| && true ∈ e.args)
-
-ortrue_p(e) = false
-
-true_absorption(e::Expr) = Base.replace(e, ortrue_p=>true)
-
-isnot(e::Expr) = (e.head === :call && e.args[1] === :!)
-isnot(e) = false
-
-notnot_p(e::Expr) = isnot(e) && isnot(e.args[2])
-notnot_p(e) = false
-
-double_neg_elim_cons(e::Expr) = e.args[2].args[2]
-
-double_negation(e::Expr) = Base.replace(e, notnot_p=>double_neg_elim_cons)
-
+simplify(e) = Espresso.simplify(e)
 
 function evalwith(g, input)
     input = Bool.(input)

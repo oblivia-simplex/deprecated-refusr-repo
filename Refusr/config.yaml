@@ -1,5 +1,5 @@
-experiment_duration: 1000
-
+experiment_duration: 1500
+preserve_population: true
 
 selection:
   fitness_function: "fit"
@@ -16,7 +16,7 @@ genotype:
   mutation_rate: 0.1
 
 population:
-  size: [20, 20]
+  size: [12, 12]
   toroidal: true
   locality: 16
   n_elites: 10
