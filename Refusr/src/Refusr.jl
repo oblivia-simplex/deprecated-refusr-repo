@@ -50,13 +50,10 @@ end
 ## FIXME: again, objective performance should be cached, probably
 @everywhere stopping_condition(evo) = (objective_performance.(evo.geo.deme) |> maximum) == 1.0
 
+
 function launch(config_path; single_process=false)
-    config = Config.parse(config_path)
-    data = CSV.read(config.selection.data, DataFrame)
-    n_inputs = ncol(data)
-    @set config.genotype.inputs_n = n_inputs
-    @everywhere LinearGenotype._set_NUM_REGS($n_inputs)
-    
+    config = prep_config(config_path)
+ 
     fitness_function = Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     @assert fitness_function isa Function
 

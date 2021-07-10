@@ -11,12 +11,6 @@ using ..Cockatrice.Evo
 using ..Expressions
 
 
-NUM_REGS = 6
-
-function _set_NUM_REGS(n)
-    global NUM_REGS
-    NUM_REGS = n
-end
 
 RegType = Bool
 
@@ -147,7 +141,7 @@ Performance: $(g.performance)
 end
 
 
-function random_program(n; ops=OPS, num_data=NUM_REGS, num_regs=NUM_REGS)
+function random_program(n; ops=OPS, num_data=1, num_regs=1)
     [rand_inst(ops=ops, num_data=num_data, num_regs=num_regs) for _ in 1:n]
 end
     
@@ -155,7 +149,7 @@ end
 
 function Creature(config::NamedTuple)
     len = rand(config.genotype.min_len:config.genotype.max_len)
-    chromosome = [rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=NUM_REGS) for _ in 1:len]
+    chromosome = [rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=config.genotype.inputs_n) for _ in 1:len]
     fitness = Evo.init_fitness(config)
     Creature(chromosome=chromosome,
              effective_code=nothing,
@@ -243,7 +237,7 @@ end
 function mutate!(creature::Creature; config=nothing)
     inds = keys(creature.chromosome)
     i = rand(inds)
-    creature.chromosome[i] = rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=NUM_REGS) # FIXME hardcoded
+    creature.chromosome[i] = rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=config.genotype.inputs_n) 
     return
 end
 
@@ -263,7 +257,7 @@ OPS = [
 ]
 
 
-function rand_inst(;ops=OPS, num_data=NUM_REGS, num_regs=NUM_REGS)
+function rand_inst(;ops=OPS, num_data=1, num_regs=num_data)
     op, arity = rand(ops)
     dst = rand(1:num_regs)
     src = rand(Bool) ? rand(1:num_regs) : -1 * rand(1:num_data)
@@ -307,15 +301,17 @@ end
 
 OUTREGS = [1]
 
-MAX_STEPS = 512
 
-function execute(code, data; make_trace=true)
-    regs = zeros(RegType, NUM_REGS)
-    trace_len = min(length(code), MAX_STEPS) # Assuming no loops
-    trace = zeros(RegType, NUM_REGS, trace_len) |> BitArray
+function execute(code, data; config, make_trace=true)
+    num_regs = config.genotype.inputs_n
+    max_steps = config.genotype.max_steps
+    outregs = config.genotype.output_regs
+    regs = zeros(RegType, num_regs)
+    trace_len = min(length(code), max_steps) # Assuming no loops
+    trace = zeros(RegType, num_regs, trace_len) |> BitArray
     pc = 1
     steps = 0
-    while steps <= MAX_STEPS && pc <= trace_len
+    while steps <= max_steps && pc <= trace_len
         inst = code[pc]
         evaluate_inst!(regs=regs, data=data, inst=inst)
         if make_trace
@@ -324,15 +320,15 @@ function execute(code, data; make_trace=true)
         pc += 1
         steps += 1
     end
-    regs[OUTREGS][1], trace
+    regs[outregs][1], trace
 end
 
 
-function FF.evaluate(g::Creature; data::Vector, make_trace=true)
+function FF.evaluate(g::Creature; data::Vector, config::NamedTuple, make_trace=true)
     if g.effective_code === nothing
         g.effective_code = strip_introns(g.chromosome, OUTREGS)
     end
-    execute(g.effective_code, data, make_trace=make_trace)
+    execute(g.effective_code, data, config=config, make_trace=make_trace)
 end
 
 
@@ -388,9 +384,10 @@ end
 
 function structured_text(prog; config=nothing, comment="")
     prog = strip_introns(prog, [1])
+    num_regs = config.genotype.inputs_n
     reg_decl = """
 VAR
-    R : ARRAY[1..$(NUM_REGS)] OF BOOL;
+    R : ARRAY[1..$(num_regs)] OF BOOL;
 END_VAR
 
 """

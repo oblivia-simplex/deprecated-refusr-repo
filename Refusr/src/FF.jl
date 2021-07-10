@@ -107,7 +107,10 @@ function fit(geo, i)
                           build_interaction_matrix(geo)
                           : nothing)
     if g.phenotype === nothing
-        results, trace = [evaluate(g, data=collect(Bool, r[1:end-1])) for r in eachrow(DATA)] |> unzip
+        results, trace = [evaluate(g,
+                                   config=config,
+                                   data=collect(Bool, r[1:end-1]))
+                          for r in eachrow(DATA)] |> unzip
         g.phenotype = (results = results, trace = trace)
     end
     # We could scan the trace here, and see if the program solved the problem
@@ -132,3 +135,4 @@ end
 
 end # end module FF
 
+# TODO: Implement Trace Consistency fitness metric
