@@ -2,6 +2,7 @@ using Cockatrice
 
 using InformationMeasures
 using Statistics
+using Setfield
 
 include("StructuredTextTemplate.jl")
 include("Expressions.jl")
@@ -19,6 +20,14 @@ function get_likeness(g)
     isnothing(g.likeness) ? -Inf : maximum(g.likeness)
 end
 
+
+function prep_config(path)
+    config = Cockatrice.Config.parse(path)
+    data = CSV.read(config.selection.data, DataFrame)
+    n_inputs = ncol(data)
+    config = @set config.genotype.inputs_n = n_inputs
+    config
+end
 
 function objective_performance(g)
     if g.phenotype === nothing
