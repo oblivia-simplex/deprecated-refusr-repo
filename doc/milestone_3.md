@@ -31,13 +31,19 @@ The link below leads to a video demonstrating the current state of the REFUSR ha
 
 
 
-# An Adaptive Property Testing Library
+# Foundations of the Property Testing Library: Junta Testing
 
 ## Adaptive Junta Testing
 
-“Adaptive” refers to not assuming but rather being adaptable to an input distribution of interest. Algorithm from “Distribution-Free Junta Testing,” Zhengyang Liu, Xi Chen, Rocco A. Servedio, Ying Sheng, and Jinyu Xie. STOC’18, June 25–29, 2018, Los Angeles, CA, USA.
+Based on a preliminary literature review, we identified as state-of-the-art the adaptive junta tester described in “Distribution-Free Junta Testing,” Zhengyang Liu, Xi Chen, Rocco A. Servedio, Ying Sheng, and Jinyu Xie. STOC’18, June 25–29, 2018, Los Angeles, CA, USA. The algorithm 
+
+“Adaptive” refers to not assuming but rather being adaptable to an input distribution of interest. This permits a better theoretical performance, with a polynomial rather than exponential query complexity, and also makes it possible to directly use empirical execution data to learn the probability distribution that the junta tester samples from, so that its results can be most a propos of the part of the input space that is most relevant in practice.
 
 ### Novel Automatic Order Search
+
+The algorithm as developed and described in the source paper could only test the junta property of a given order. That is, the junta predicate checking algorithm took the number of input bits _k_ as a parameter and could only reply with an acceptance or probabilistic rejection of a junta of that order.
+
+By identifying the state that could be shared across iterations as the partial list of 
 
 ### Preliminary Benchmarks
 
@@ -104,9 +110,9 @@ end
  
 ~~~~
 
-## 4-to-1 Multiplexer Experiment
+## 4-to-1 Multiplexor Experiment
 
-![](https://i.imgur.com/44qOigJ.png)
+![Circuit diagram of a 4-to-1 multiplexor (MUX)](https://i.imgur.com/44qOigJ.png)
 
 (TODO: Find consistent looking diagrams for the multiplexers)
 
@@ -310,6 +316,20 @@ END_CONFIGURATION
 
 ### Implicit Fitness Sharing and Interaction Matrices
 
+One of the most serious hazards that an evolutionary process can encounter is a premature collapse of population diversity. This can happen when a particular genetic line $G$ acquires a decisive competitive advantage early in the process by performing very well on a subset $S \subset T$ of the test cases -- a significantly larger subset, let's say, than those handled by competing gene lines. It may be the case that $G$ lacks the computational resources to handle cases outside of $S$, but so long as the rewards meted out by the fitness function are proportionate to the number of cases correctly solved, without regard for the rarity or difficulty of solutions, we may soon see a population dominated almost entirely by recombinations of $G$, each exhibiting strikingly similar behaviour.
+
+One way to offset such a premature convergence and loss of genetic information is to adjust the reward for a test case according to the frequency with which that test case has been successfully solved. This can easily be done by maintaining a data structure called an _interaction matrix_, a 2-dimensional array whose rows represent test cases and whose columns represent individuals in the population. `I[i,j]` is set to `1` if individual `j` solves test case `i`, and `0` otherwise. Each test case can then be assigned a "difficulty" score simply by subtracting the mean of its row from 1. Each individual then receives an award equal to the mean of the difficulty scores for the problems it's solved. 
+
+~~~{.julia}
+difficulty_scores = 1.0 .- map(mean, eachrow(INTERACTION_MATRIX))
+correct_results   = (!).(answer_vector .⊻ result_vector) # 
+adjusted_rewards  = correct_vector .* difficulty_scores
+aggregate_reward  = mean(adjusted_rewards)
+~~~
+
+
+
+
 
 
 
@@ -323,6 +343,9 @@ END_CONFIGURATION
 ![](https://i.imgur.com/z8FAdTL.png)
 
 #### Interaction Matrices
+
+The loss of behavioural diversity in the poulation where fitness sharing is not in effect is evident to even a visual inspection of its interaction matrices, as shown below. Consistent bars of black and white, spanning multiple columns, indicates a lack of heterogeneity in the population. Note that horizontal locality does have some significance here, since the propagation of genes is probabilistically influenced by geographical structure, as noted earlier.
+
 
 ![Visualization of the interaction matrices of four islands early in the evolutionary process, without fitness sharing](https://i.imgur.com/UQJXati.png)
 
@@ -349,6 +372,7 @@ END_CONFIGURATION
 
 #### Interaction Matrices
 
+
 ![Visualization of the interaction matrices of four islands early in the evolutionary process, _with_ fitness sharing](https://i.imgur.com/W5czPSD.png)
 
 ![The interaction matrices, 90 seconds in, in the populations with fitness sharing](https://i.imgur.com/HDhGIDa.png)
@@ -362,7 +386,7 @@ END_CONFIGURATION
 
 ## 8-to-1 Multiplexor
 
-![](https://i.imgur.com/kxwEJxm.png)
+![Circuit diagram of an 8-to-1 (11-bit) multiplexor](https://i.imgur.com/kxwEJxm.png)
 
 
 ### Solution in Linear Register Transfer Code (Unsimplified)
