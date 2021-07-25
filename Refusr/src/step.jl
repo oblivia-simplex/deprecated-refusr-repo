@@ -18,12 +18,7 @@ function do_step!(evo)
         m = get_mutual_information(a, b)
         iszero(e) ? m : m / e
     end
-    if !isnothing(FF.DATA)
-        interaction_matrix = FF.build_interaction_matrix(evo.geo)
-    else
-        interaction_matrix = nothing
-    end
-    parent_indices, children_indices = Cockatrice.Evo.step!(evo, eval_children=true, interaction_matrix=interaction_matrix)
+    parent_indices, children_indices = Cockatrice.Evo.step!(evo, eval_children=true)
     
     parents = evo.geo[parent_indices]
     children = evo.geo[children_indices]

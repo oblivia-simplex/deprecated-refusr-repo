@@ -86,7 +86,7 @@ md"## Geography"
 md"Populations are distributed across the surface of an 2-dim torus. Their spatial arrangement, or 'geography', is used to probabilistically restrict competition and breeding to local regions -- the idea being that this should inhibit premature convergence and the collapse of population diversity."
 
 # ╔═╡ 0fa1a2b4-7d3c-4095-baab-73000ecd0039
-epicentre = (5,2)
+epicentre = (5,1)
 
 # ╔═╡ 8f2ffb86-5803-4caf-9107-2c068411d260
 function see_combatants(geo, tsize; origin=epicentre)
@@ -112,7 +112,10 @@ backup_file = "demo_world_and_logger.dump"
 WORLD, LOGGER, IM_LOG = restore_from_backup ? deserialize(backup_file) : launch("./config.yaml")
 
 # ╔═╡ 139cfeb8-a9ee-418e-a5c4-d94d5fc0626b
-colorant"hotpink" .* reshape(Geo.distance_weights(WORLD.geo, epicentre), size(WORLD.geo.deme))
+geo_weights = colorant"hotpink" .* reshape(Geo.distance_weights(WORLD.geo, epicentre), size(WORLD.geo.deme))
+
+# ╔═╡ 57f62d4b-97a4-4d16-9810-7de25e0b7dae
+save("images/geo_weights.png", geo_weights)
 
 # ╔═╡ f79497b3-bc51-44dd-ab5f-da668bbb6e04
 [see_combatants(WORLD.geo, config.selection.t_size, origin=epicentre) for _ in 1:5]
@@ -279,7 +282,7 @@ test_input = [false, true, false, false, false, false, true]
 target_out = target_fn(test_input)
 
 # ╔═╡ f8336bac-a5a1-4dbb-8e04-f5bfd42319f4
-champion_out, trace = LinearGenotype.FF.evaluate(champion, data=test_input)
+champion_out, trace = LinearGenotype.FF.evaluate(champion, config=config, data=test_input)
 
 # ╔═╡ f4ff83a5-15f1-4dc7-8e23-895c1caa79dc
 champion_out == target_out
@@ -288,7 +291,7 @@ champion_out == target_out
 md"If this doesn't work, let's at least note that we've found a useful debugging and unit testing tool in Z3. (Update: I did find a bug this way, and fixed it, this morning!)" 
 
 # ╔═╡ afa197af-d623-47f2-9b2e-fc91b3391cef
-tt = Expressions.truth_table(rewrite_all(champion_sexp, :(R[_]), false))
+tt = Expressions.truth_table(champion_sexp)
 
 # ╔═╡ 624c4e52-7f72-4c7a-b343-a26e388a1105
 tt[:,end] == champion.phenotype.results
@@ -523,6 +526,11 @@ md"The groupings and regular patterns in these matrices may be partially explain
 # ╔═╡ c9b4f074-779e-4b1f-81e9-b85cc975c946
 ims = compose_im_image(IM_LOG, 10)
 
+# ╔═╡ 538eb037-4ed6-46dc-81a1-85fbdb031f2f
+for (i, im) in enumerate(ims)
+	save("IM_$(i).png", im)
+end
+
 # ╔═╡ ac3f0cb1-3dc5-4397-aa8e-db5b16f65d1b
 begin 
 	ImageView.closeall() 
@@ -560,13 +568,19 @@ md"We can experiment with using a clustering algorithm to group the problem set 
 slice = 300
 
 # ╔═╡ c0bd2e1b-cf59-4bd0-bb07-da2ee8282b8d
-imresize(cluster_interaction_matrix(IM_LOG[slice], 5),ratio=4)
+im_clusters = imresize(cluster_interaction_matrix(IM_LOG[slice], 5),ratio=4)
+
+# ╔═╡ 43a47d09-c33d-4cc1-97d9-83135c992cb6
+save("images/im_task_clusters_$(slice).png", im_clusters)
 
 # ╔═╡ 713a4009-2572-4b64-9496-30af9f254ced
 md"Alternately, we can transpose the interaction matrix and use clustering to distinguish between subpopulations, according to behaviour or phenotype."
 
 # ╔═╡ 97e80ce3-81e1-478c-8b66-30077b754d98
-imresize(cluster_interaction_matrix(IM_LOG[slice]', 5)', ratio=4)
+im_geno_clusters = imresize(cluster_interaction_matrix(IM_LOG[slice]', 5)', ratio=4)
+
+# ╔═╡ 4a05355f-7e61-4bed-a886-f0fd92d40df0
+save("images/im_geno_clusters_$(slice).png", im_geno_clusters)
 
 # ╔═╡ Cell order:
 # ╟─99f22adc-deac-11eb-305b-2f82290de89b
@@ -589,6 +603,7 @@ imresize(cluster_interaction_matrix(IM_LOG[slice]', 5)', ratio=4)
 # ╠═5c65b7a3-5b21-4d56-8ebb-9deed2748212
 # ╠═0fa1a2b4-7d3c-4095-baab-73000ecd0039
 # ╠═139cfeb8-a9ee-418e-a5c4-d94d5fc0626b
+# ╠═57f62d4b-97a4-4d16-9810-7de25e0b7dae
 # ╠═8f2ffb86-5803-4caf-9107-2c068411d260
 # ╠═f79497b3-bc51-44dd-ab5f-da668bbb6e04
 # ╠═ff10c4ff-8270-4f31-ab19-21cbe51f7ea5
@@ -697,6 +712,7 @@ imresize(cluster_interaction_matrix(IM_LOG[slice]', 5)', ratio=4)
 # ╠═a42bf562-d0ba-47f4-bf61-924753ee3227
 # ╠═c7841a1d-6325-40f2-a6fe-63646efe1fba
 # ╠═c9b4f074-779e-4b1f-81e9-b85cc975c946
+# ╠═538eb037-4ed6-46dc-81a1-85fbdb031f2f
 # ╠═ac3f0cb1-3dc5-4397-aa8e-db5b16f65d1b
 # ╠═2e51d9b5-de20-49fd-a9ec-00584bf8fc41
 # ╠═0fa47310-b21d-4fc8-8ba1-05ea98877314
@@ -709,5 +725,7 @@ imresize(cluster_interaction_matrix(IM_LOG[slice]', 5)', ratio=4)
 # ╟─c1f62cf7-69d8-4329-9647-36ec07f850bc
 # ╠═a283c8e8-0b93-423c-813c-b6b3e0773119
 # ╠═c0bd2e1b-cf59-4bd0-bb07-da2ee8282b8d
+# ╠═43a47d09-c33d-4cc1-97d9-83135c992cb6
 # ╟─713a4009-2572-4b64-9496-30af9f254ced
 # ╠═97e80ce3-81e1-478c-8b66-30077b754d98
+# ╠═4a05355f-7e61-4bed-a886-f0fd92d40df0

@@ -4,7 +4,8 @@ module FF
 #import ..LinearGenotype: evaluate, parsimony
 using FunctionWrappers: FunctionWrapper
 using Statistics, CSV, DataFrames, InformationMeasures, StatsBase
-using Memoize
+using ..BitEntropy
+using Cockatrice.Geo
 
 
 ### Interface for FF-required functions
@@ -13,9 +14,10 @@ evaluate(g; data, kwargs...) = error("unimplemented")
 ###
 
 DATA = nothing
+INPUT = nothing
 
 function _set_data(data::String; samplesize=:ALL)
-    global DATA
+    global DATA, INPUT
     data = CSV.read(data, DataFrame)
     if samplesize === :ALL || DataFrames.nrow(data) <= samplesize
         DATA = data
@@ -23,27 +25,31 @@ function _set_data(data::String; samplesize=:ALL)
         rows = sample(1:size(data,1), samplesize, replace=false)
         DATA = data[rows, :]
     end
+    INPUT = Array{Bool}(DATA[:,1:end-1]) |> BitArray
 end
 
 function _set_data(data::DataFrame)
     global DATA
     DATA = data
+    INPUT = Array{Bool}(DATA[:,1:end-1]) |> BitArray
 end
 
+
+hamming(a::BitArray, b::BitArray) = (!).(a .⊻ b)
 
 mutualinfo(a, b) = get_mutual_information(a,b) / get_entropy(a)
 
 
 get_difficulty_scores(IM) = 1.0 .- map(mean, eachrow(IM))
 
-function get_hamming(answers, result; IM=nothing)
+function get_hamming(answers, result; IM=nothing, sharing=(!isnothing(IM)))
     correct = (!).(answers .⊻ result)
-    if isnothing(IM)
-        mean(correct)
-    else
+    if sharing
         correct = (!).(answers .⊻ result)
         adjusted = correct .* get_difficulty_scores(IM)
         mean(adjusted)
+    else
+        mean(correct)
     end
 end
 
@@ -57,7 +63,7 @@ intermediate_results(trace) = vcat([transpose(tr[1,:]) for tr in trace]...)
 intermediate_hamming(answers, trace) = map(c->get_hamming(answers, c), eachcol(intermediate_results(trace)))
 
 
-get_answers(data) = Bool.(data[:, end])
+get_answers(data=DATA) = Bool.(data[:, end]) |> BitArray
 
 # to keep things working smoothly, we'll consider an absent phenotype to have passed
 # all tests, just for the sake of difficulty calculation. The idea here is that a
@@ -77,6 +83,43 @@ function build_interaction_matrix(geo)
     end
 end
 
+# Some trace accessors for convenience. Check to make sure these aren't obsolete.
+
+function trace_accessor(trace; reg=:, step=:, case=:)
+    trace[reg,step,case]
+end
+
+
+function add_data_to_trace(trace, input=INPUT)
+    n_steps = size(trace, 2)
+    x = repeat(INPUT, 1, 1, n_steps)
+    p = permutedims(x, [2, 3, 1])
+    cat(p, trace, dims=(1,))
+end
+
+
+## See Krawiec, chapter 6
+
+function trace_consistency(trace::BitArray, answers::BitArray)
+    A = map(r->BitEntropy.conditional_entropy(answers, r), eachslice(trace, dims=2))
+    B = map(r->BitEntropy.conditional_entropy(r, answers), eachslice(trace, dims=2))
+    minimum(A .+ B)
+end
+
+
+OUTREG = 1
+
+function trace_hamming(trace::BitArray, answers::BitArray)
+    x = view(trace, OUTREG, :, :) .⊻ answers
+    (1.0 .- map(mean, eachcol(x))) |> maximum
+end
+
+
+function trace_mutinfo(trace::BitArray, answers::BitArray)
+    x = view(trace, OUTREG, :, :)
+    map(x -> mutualinfo(answers, x), eachcol(x)) |> maximum
+end
+
 ## NOTE on translating coordinates:
 # A[(i[2]-1)*(size(A,1))+i[1]] == A[i...]
 
@@ -84,7 +127,7 @@ function update_interaction_matrix!(geo, index, out_vec)
     if geo.interaction_matrix === nothing
         geo.interaction_matrix = build_interaction_matrix(geo)
     end
-    flat_index = (index[2]-1) * size(geo.deme,1) + index[1]
+    flat_index = Geo.hilbert_index(geo, index)
     geo.interaction_matrix[:, flat_index] .= (!).(out_vec .⊻ get_answers(DATA))
 end
 
@@ -103,22 +146,31 @@ function fit(geo, i)
     # FIXME: refactor so that the interaction matrix is held as a field of Geo
     # and is updated only as needed, IF that turns out to be faster. It might not
     # be, as julia is really rather quick with its array and matrix operations.
-    interaction_matrix = (geo.config.selection.fitness_sharing ?
-                          build_interaction_matrix(geo)
-                          : nothing)
-    if g.phenotype === nothing
-        results, trace = [evaluate(g,
-                                   config=config,
-                                   data=collect(Bool, r[1:end-1]))
-                          for r in eachrow(DATA)] |> unzip
-        g.phenotype = (results = results, trace = trace)
+    interaction_matrix = build_interaction_matrix(geo)
+
+    g.phenotype = if isnothing(g.phenotype)
+        res, tr = evaluate(
+            g,
+            config=config,
+            INPUT=INPUT,
+            make_trace=true)
+        (results = res, trace = tr)
+    else
+        g.phenotype
     end
+    
+    @assert g.phenotype.results isa BitArray "g is $(g), g.phenotype.results is $(g.phenotype.results |> typeof)"
+    @assert g.phenotype.trace isa BitArray "g is $(g) g.phenotype.trace is $(g.phenotype.trace |> typeof)"
+
     # We could scan the trace here, and see if the program solved the problem
     # at some intermediary stage.
 
-    answers = get_answers(DATA)
-    mutinfo = mutualinfo(answers, g.phenotype.results)
-    hamming = get_hamming(answers, g.phenotype.results, IM=interaction_matrix) 
+    answers = get_answers()
+    mutinfo = trace_mutinfo(g.phenotype.trace, answers)
+    #mutualinfo(answers, g.phenotype.results)
+    # NOTE trace_consistency should be minimized. Let's make it negative.
+    #trace_con = -1.0 * trace_consistency(g.phenotype.trace, answers)
+    hamming = get_hamming(answers, g.phenotype.results, sharing=config.selection.fitness_sharing, IM=interaction_matrix) 
     update_interaction_matrix!(geo, i, g.phenotype.results)
     # Variety measures how different the program behaves with respect to input
     # variety = length(unique(g.phenotype.trace)) / length(g.phenotype.trace)
