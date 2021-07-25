@@ -12,7 +12,20 @@ using ..Expressions
 
 
 
-RegType = Bool
+const RegType = Bool
+
+const mov = identity
+
+const OPS = [
+    #    (⊻, 2),
+    (|, 2),
+    (&, 2),
+    (~, 1),
+    (mov, 1), 
+    #    (truth, 0),
+    #    (falsity, 0), 
+]
+
 
 struct Inst
     op::Function
@@ -22,6 +35,41 @@ struct Inst
     src::Int
 end
 
+
+
+@inline function semantic_intron(inst::Inst)::Bool
+    inst.op ∈ (&, |, mov) && (inst.src == inst.dst)
+end
+
+
+function strip_introns(code, out_regs)
+    active_regs = copy(out_regs)
+    active_insts = []
+    for inst in reverse(code)
+        semantic_intron(inst) && continue
+        if inst.dst ∈ active_regs
+            push!(active_insts, inst)
+            filter!(r -> r != inst.dst, active_regs)
+            inst.arity == 2 && push!(active_regs, inst.dst)
+            inst.arity >= 1 && push!(active_regs, inst.src)
+        end
+    end
+    reverse(active_insts)
+end
+
+
+function byte_encoding(inst)
+
+    src = UInt8(abs(inst.src))
+    if inst.src < 0
+        src = (~src) + 0x01 # Two's Complement
+    end
+    [
+        UInt8(findfirst(x->x==(inst.op, inst.arity), OPS)),
+        UInt8(inst.dst),
+        src
+    ]
+end
 
 Base.isequal(a::Inst, b::Inst) = (a.op == b.op
                                   && a.arity == b.arity
@@ -104,39 +152,65 @@ Base.@kwdef mutable struct Creature
 end
 
 
-function summarize(g::Creature)
-    symbolic_str = to_expr(g.chromosome) |> string
+function summarize(g)
+    symbolic = to_expr(g.chromosome) |> Expressions.simplify
+    svg = Expressions.diagram(symbolic, format="svg")
     chrom_str = join(map(string, g.chromosome), "\n")
     effec_str = isnothing(g.effective_code) ? "" : join(map(string, g.effective_code), "\n")
 
-    pheno_str = isnothing(g.phenotype) ? "" : """
-Phenotype.Results:
-
-$(g.phenotype.results)
-
-Phenotype.Trace:
-
-$(g.phenotype.trace)
+    header = """
+title: Champion
+header-includes:
+- \\usepackage{fvextra}
+- \\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines, commandchars=\\\\\\{\\}}
 """
 
-"""
-Name: $(g.name)
+    return """
+---
+$(header)
+---
 
-Symbolic Expression: $(symbolic_str)
+# Name: $(g.name)
+## Generation: $(g.generation)
 
-Chromosome:
+
+## Chromosome
+
+```
 $(chrom_str)
+```
 
-Effective Code:
+## Effective Code
+
+```
 $(effec_str)
+```
 
-$(pheno_str)
+## Symbolic Expression:
 
-Parents: $(g.parents)
+```
+$(symbolic)
+```
 
-Fitness: $(g.fitness)
+### Syntax Tree
 
-Performance: $(g.performance)
+$(svg)
+
+## Phenotype.results
+
+```
+$(join(string.(Int.(g.phenotype.results)), ""))
+```
+
+## Parents
+
+$(join(g.parents, "\n"))
+
+## Fitness
+
+`$(g.fitness)`
+
+## Performance: $(g.performance)
 """
 end
 
@@ -218,6 +292,9 @@ function Creature(chromosome::Vector{Inst})
 end
 
 
+function crop(seq, len)
+    length(seq) > len ? seq[1:len] : seq
+end
 
 function crossover(mother::Creature, father::Creature; config=nothing)::Vector{Creature}
     mother.num_offspring += 1
@@ -226,10 +303,14 @@ function crossover(mother::Creature, father::Creature; config=nothing)::Vector{C
     fx = rand(1:length(father.chromosome))
     chrom1 = [mother.chromosome[1:mx]; father.chromosome[(fx+1):end]]
     chrom2 = [father.chromosome[1:fx]; mother.chromosome[(mx+1):end]]
-    children = Creature.([chrom1, chrom2])
+    len = config.genotype.max_len
+    children = Creature.([crop(chrom1, len), crop(chrom2, len)])
     generation = max(mother.generation, father.generation) + 1
-    (c -> c.generation = generation).(children)
-    (c -> c.fitness = Evo.init_fitness(mother.fitness)).(children)
+    for child in children
+        child.parents = [mother.name, father.name]
+        child.generation = generation
+        child.fitness = repeat([-Inf], config.selection.d_fitness)
+    end
     children
 end
 
@@ -247,15 +328,6 @@ truth() = true
 falsity() = false
 
 
-OPS = [
-#    (⊻, 2),
-    (|, 2),
-    (&, 2),
-    (~, 1),
-    (truth, 0),
-    (falsity, 0),
-]
-
 
 function rand_inst(;ops=OPS, num_data=1, num_regs=num_data)
     op, arity = rand(ops)
@@ -266,6 +338,7 @@ end
 
 
 @inline I(ar,i) = ar[mod1(abs(i), length(ar))]
+@inline IV(ar,i) = ar[mod1(abs(i), length(ar)), :]
 
 function evaluate_inst!(;regs, data, inst)
     s_regs = inst.src < 0 ? data : regs
@@ -281,56 +354,83 @@ function evaluate_inst!(;regs, data, inst)
 end
 
 
-function strip_introns(code, out_regs)
-    active_regs = copy(out_regs)
-    active_insts = []
-    for inst in reverse(code)
-        if inst.dst ∈ active_regs 
-            push!(active_insts, inst)
-            filter!(r -> r != inst.dst, active_regs)
-            if inst.arity == 2
-                push!(active_regs, inst.dst)
-            end
-            if inst.arity ≥ 1
-                push!(active_regs, inst.src)
-            end
-        end
+## TODO: Optimize this. maybe even for CUDA.
+# The indexing is slowing things down, I think.
+# vectoralize it further.
+function evaluate_inst_vec!(;R, D, inst)
+    # Add a dimension to everything
+    s_regs = inst.src < 0 ? D : R
+    d_regs = R
+    if inst.arity == 2
+        args = [IV(d_regs, inst.dst), IV(s_regs, inst.src)]
+    elseif inst.arity == 1
+        args = [IV(s_regs, inst.src)]
+    else
+        args = []
     end
-    reverse(active_insts)
+    d_regs[inst.dst, :] .= inst.op.(args...)
+
 end
 
-OUTREGS = [1]
 
-
-function execute(code, data; config, make_trace=true)
+function execute(code, data; config, make_trace=true)::Tuple{RegType, BitArray}
     num_regs = config.genotype.inputs_n
     max_steps = config.genotype.max_steps
-    outregs = config.genotype.output_regs
+    outreg = config.genotype.output_reg
     regs = zeros(RegType, num_regs)
-    trace_len = min(length(code), max_steps) # Assuming no loops
+    trace_len = max(1, min(length(code), max_steps)) # Assuming no loops
     trace = zeros(RegType, num_regs, trace_len) |> BitArray
-    pc = 1
     steps = 0
-    while steps <= max_steps && pc <= trace_len
-        inst = code[pc]
+    for (pc, inst) in enumerate(code)
+        if pc > max_steps break end
         evaluate_inst!(regs=regs, data=data, inst=inst)
         if make_trace
             trace[:, pc] .= regs
         end
-        pc += 1
         steps += 1
     end
-    regs[outregs][1], trace
+    regs[outreg], trace
 end
 
 
-function FF.evaluate(g::Creature; data::Vector, config::NamedTuple, make_trace=true)
-    if g.effective_code === nothing
-        g.effective_code = strip_introns(g.chromosome, OUTREGS)
+function execute_vec(code, INPUT; config, make_trace=true)
+    #num_regs = config.genotype.inputs_n
+    D = INPUT'
+    R = BitArray(zeros(Bool, size(D)))
+    max_steps = config.genotype.max_steps
+    trace_len = max(1, min(length(code), max_steps))
+    trace = zeros(Bool, size(R)..., trace_len) |> BitArray
+    steps = 0
+    for (pc, inst) in enumerate(code)
+        if pc > max_steps break end
+        evaluate_inst_vec!(R=R, D=D, inst=inst)
+        if make_trace
+            trace[:, :, pc] .= R
+        end
+        steps += 1
     end
-    execute(g.effective_code, data, config=config, make_trace=make_trace)
+    R[config.genotype.output_reg, :], trace
 end
 
+
+function evaluate_vectoral(code; INPUT::BitArray, config::NamedTuple, make_trace=true)
+    execute_vec(code, INPUT, config=config, make_trace=make_trace)
+end
+
+
+unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
+
+function evaluate_sequential(code; INPUT::BitArray, config::NamedTuple, make_trace=true)
+    res, tr = [execute(code, row, config=config, make_trace=make_trace) for row in eachrow(INPUT)] |> unzip
+    (res, cat(tr..., dims=(3,)))
+end
+
+function FF.evaluate(g::Creature; INPUT::BitArray, config::NamedTuple, make_trace=true)
+    if isnothing(g.effective_code)
+        g.effective_code = strip_introns(g.chromosome, [config.genotype.output_reg])
+    end
+    evaluate_vectoral(g.effective_code, INPUT=INPUT, config=config, make_trace=make_trace)
+end
 
 # What if we define parsimony wrt the # of unnecessary instructions?
 
@@ -360,7 +460,7 @@ function stepped_parsimony(g::Creature, threshold::Int)
 end
 
 
-FF.parsimony(g::Creature) = stepped_parsimony(g, 100)
+FF.parsimony(g::Creature) = effective_parsimony(g)
 
 
 ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :~ => "NOT"] |> Dict

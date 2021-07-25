@@ -1,9 +1,12 @@
 using Cockatrice
 
+using CSV, DataFrames
+using ProgressMeter
 using InformationMeasures
 using Statistics
 using Setfield
 
+include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
 include("Expressions.jl")
 include("Names.jl")
@@ -24,7 +27,7 @@ end
 function prep_config(path)
     config = Cockatrice.Config.parse(path)
     data = CSV.read(config.selection.data, DataFrame)
-    n_inputs = ncol(data)
+    n_inputs = ncol(data) - 1
     config = @set config.genotype.inputs_n = n_inputs
     config
 end
@@ -39,18 +42,21 @@ function objective_performance(g)
 
     correct = (!).(g.phenotype.results .⊻ FF.get_answers(FF.DATA))
     g.performance = mean(correct)
+    return g.performance
 end
 
+stopping_condition(evo) = (objective_performance.(evo.elites) |> maximum) == 1.0
+
 TRACERS = [
-    (key="objective", callback=objective_performance, rate=1.0),
-    (key="fitness_1", callback=g->g.fitness[1], rate=1.0),
-    (key="fitness_2", callback=g->g.fitness[2], rate=1.0),
-    (key="fitness_3", callback=g->g.fitness[3], rate=1.0),
-    (key="chromosome_len", callback=g->length(g.chromosome), rate=1.0),
-    (key="effective_len", callback=g->isnothing(g.effective_code) ? -Inf : length(g.effective_code), rate=1.0),
-    (key="num_offspring", callback=g->g.num_offspring, rate=1.0),
-    (key="generation", callback=g->g.generation, rate=1.0),
-    (key="likeness", callback=get_likeness, rate=1.0),
+    (key="objective", callback=objective_performance, rate=0.1),
+    (key="fitness_1", callback=g->g.fitness[1], rate=0.1),
+    (key="fitness_2", callback=g->g.fitness[2], rate=0.1),
+    #(key="fitness_3", callback=g->g.fitness[3], rate=1.0),
+    (key="chromosome_len", callback=g->length(g.chromosome), rate=0.1),
+    (key="effective_len", callback=g->isnothing(g.effective_code) ? -Inf : length(g.effective_code), rate=0.1),
+    (key="num_offspring", callback=g->g.num_offspring, rate=0.1),
+    (key="generation", callback=g->g.generation, rate=0.1),
+    #(key="likeness", callback=get_likeness, rate=0.1),
 ]
 
 
@@ -71,11 +77,14 @@ LOGGERS = [
     (key="num_offspring", reducer=maximum),
     (key="num_offspring", reducer=Statistics.mean),
     (key="generation", reducer=Statistics.mean),
-    (key="likeness", reducer=meanfinite),
+    #(key="likeness", reducer=meanfinite),
 ]
 
 
 ## To facilitate debugging
-mkevo() = Cockatrice.Evo.Evolution(Cockatrice.Config.parse("./config.yaml"), creature_type=LinearGenotype.Creature, fitness=FF.fit, tracers=TRACERS, mutate=LinearGenotype.mutate!, crossover=LinearGenotype.crossover, objective_performance=objective_performance)
-
+function mkevo(config="./config.yaml")
+    config = prep_config(config)
+    FF._set_data(config.selection.data)
+    Cockatrice.Evo.Evolution(config, creature_type=LinearGenotype.Creature, fitness=FF.fit, tracers=TRACERS, mutate=LinearGenotype.mutate!, crossover=LinearGenotype.crossover, objective_performance=objective_performance)
+end
 

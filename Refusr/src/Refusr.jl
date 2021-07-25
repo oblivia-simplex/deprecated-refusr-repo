@@ -47,11 +47,8 @@ function init(;config_path="./config.yaml", fitness=nothing, tracers=TRACERS)
 end
 
 
-## FIXME: again, objective performance should be cached, probably
-@everywhere stopping_condition(evo) = (objective_performance.(evo.geo.deme) |> maximum) == 1.0
 
-
-function launch(config_path; single_process=false)
+function launch(config_path)
     config = prep_config(config_path)
  
     fitness_function = Meta.parse("FF.$(config.selection.fitness_function)") |> eval
@@ -67,9 +64,17 @@ function launch(config_path; single_process=false)
               :stopping_condition => stopping_condition,
               :objective_performance => objective_performance,
               ]
-    if single_process
-        Cosmos.run(;params...)
-    else
-        Cosmos.δ_run(;params...)
-    end
+    world, logger = Cosmos.δ_run(;params...)
+    world = collect(world)
+    # FIXME # Base.kill(Distributed.workers())
+    elites = [w.elites[1] for w in world]
+    champion = sort(elites, by=objective_performance)[end]
+    @info "Preparing summary of champion $(champion.name) and simplifying expression..."
+    champion_md = LinearGenotype.summarize(champion)
+    println("Champion:\n$(champion_md)")
+    @info "Saving report to $(logger.log_dir)/champion.md"
+    write("$(logger.log_dir)/champion.md", champion_md)
+    run(`pandoc $(logger.log_dir)/champion.md -o $(logger.log_dir)/champion.html`)
+    return (world=world, logger=logger, champion=champion)
+    
 end

@@ -1,6 +1,9 @@
 # Functions for manipulating expressions
 module Expressions
 
+using PyCall
+using TikzPictures
+using TreeView
 using DataFrames
 using StatsBase
 using FunctionWrappers: FunctionWrapper
@@ -10,6 +13,12 @@ using Espresso # Espresso actually implements some of the features
 
 export replace!, replace, count_subexpressions, enumerate_expr, truth_table, compile_expression
 
+
+sympy = pyimport("sympy")
+
+function __init__()
+    copy!(sympy, pyimport("sympy"))
+end
 
 function Base.replace!(e::Expr, p::Pair; all=true)
     old, new = p
@@ -121,25 +130,65 @@ prune!(e, depth, terminals) = nothing
 # Rewriting rules
 
 
+@simple_rule identity(x)      x
 @simple_rule ~~x              x
 @simple_rule (false & x)      false
+@simple_rule (x & false)      false
 @simple_rule (true | x)       true
+@simple_rule (x | true)       true
 @simple_rule (false | x)      x
+@simple_rule (x | false)      x
 @simple_rule (true & x)       x
+@simple_rule (x & true)       x
 @simple_rule ~(x & y)         (~x | ~y)
 @simple_rule ~(x | y)         (~x & ~y)
 @simple_rule (x | x)          x
 @simple_rule (x & x)          x
+@simple_rule (x ⊻ x)          false
+@simple_rule ((x ⊻ y) ⊻ x)    y
 
 
 
-simplify(e) = Espresso.simplify(e)
+_simplify(e) = Espresso.simplify(e)
 
-function evalwith(g, input)
-    input = Bool.(input)
+symbols(v::Vector{String}) = isempty(v) ? [] : sympy.symbols(join(v, " ")) |> collect
+
+
+function demangle(s::Symbol)
+    st = string(s)
+    if st[1] ∈ "RD"
+        letter = Symbol(st[1])
+        number = parse(Int, st[2:end])
+        :($(letter)[$(number)])
+    else
+        s
+    end
+end
+
+
+function simplify(e::Expr)
+    variables = variables_used(e)
+    str(v) = "$(v.args[1])$(v.args[2])"
+    D = [str(x) for x in variables if x.args[1] == :D] |> symbols
+    R = [str(x) for x in variables if x.args[1] == :R] |> symbols
+    x = evalwith(e, D=D, R=R)
+    p = sympy.simplify(x)
+    s = Meta.parse(p.__repr__())
+    replace(s, (x -> x isa Symbol) => demangle)
+end
+
+
+
+
+
+
+
+function evalwith(g; D, R=[])
     eval(quote
-         let D = $input
+         let D = $D
+         let R = $R
          return $g
+         end
          end
          end)
 end
@@ -389,5 +438,30 @@ end
 
 end
 
+subscript(ref::Expr) = "$(ref.args[1])_{$(ref.args[2])}"
+
+function save_diagram(e::Expr, path)
+    s = replace(e, (x -> x isa Expr && x.head == :ref) => (x -> Symbol(string(x))))
+    Expressions.replace!(s, :~ => :NOT)
+    Expressions.replace!(s, :& => :AND)
+    Expressions.replace!(s, :| => :OR)
+    tikz = TreeView.walk_tree(s) |> TreeView.tikz_representation
+    if endswith(path, "svg")
+        save(SVG(path), tikz)
+    elseif endswith(path, "tex")
+        save(TEX(path), tikz)
+    elseif endswith(path, "pdf")
+        save(PDF(path), tikz)
+    end
+end
+
+
+function diagram(e::Expr; format="svg")
+    tmp = read(`mktemp /tmp/XXXXX.$(format)`, String) |> strip
+    save_diagram(e, tmp)
+    dia = read(tmp, String)
+    Base.rm(tmp)
+    return dia
+end
 
 end # module Expressions
