@@ -70,9 +70,9 @@ function launch(config_path)
     elites = [w.elites[1] for w in world]
     champion = sort(elites, by=objective_performance)[end]
     @info "Preparing summary of champion $(champion.name) and simplifying expression..."
-    champion_md = LinearGenotype.summarize(champion)
-    println("Champion:\n$(champion_md)")
-    @info "Saving report to $(logger.log_dir)/champion.md"
+    champion_md = Analysis.summarize(champion)
+    #println("Champion:\n$(champion_md)")
+    @info "Saving report to file://$(pwd())/$(logger.log_dir)/champion.html"
     write("$(logger.log_dir)/champion.md", champion_md)
     run(`pandoc $(logger.log_dir)/champion.md -o $(logger.log_dir)/champion.html`)
     return (world=world, logger=logger, champion=champion)

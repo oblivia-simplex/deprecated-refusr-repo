@@ -1,0 +1,32 @@
+experiment_duration: 1000
+preserve_population: true
+#experiment: "2MUX-with-sharing"
+
+selection:
+  fitness_function: "fit"
+  data: "samples/RND-EXPR_litre-preen-cunts_10000.csv"
+  d_fitness: 3
+  t_size: 6
+  fitness_sharing: true
+  trace: true
+
+genotype:
+  max_depth: 8
+  min_len: 4
+  max_len: 1000
+  data_n: 64
+  output_reg: 1
+  max_steps: 512
+  mutation_rate: 0.1
+
+population:
+  size: [14, 14]
+  toroidal: true
+  locality: 16
+  n_elites: 10
+  migration_rate: 0.1
+  migration_type: "elite"
+
+logging:
+  log_every: 1
+  save_every: 50

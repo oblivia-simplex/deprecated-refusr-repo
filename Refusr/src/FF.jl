@@ -16,9 +16,25 @@ evaluate(g; data, kwargs...) = error("unimplemented")
 DATA = nothing
 INPUT = nothing
 
+function graydecode(n::Integer)
+    r = n
+    while (n >>= 1) != 0
+        r ⊻= n
+    end
+    return r
+end
+
+grayencode(n::Integer) = n ⊻ (n >> 1)
+
+pack(row) = sum([row[i]<<(i-1) for i in 1:length(row)])
+
+graydecode_row(row) = pack(row) |> graydecode
+
+
 function _set_data(data::String; samplesize=:ALL)
     global DATA, INPUT
     data = CSV.read(data, DataFrame)
+    data = sort(eachrow(data), by = r -> graydecode_row(r[1:end-1])) |> DataFrame
     if samplesize === :ALL || DataFrames.nrow(data) <= samplesize
         DATA = data
     else
