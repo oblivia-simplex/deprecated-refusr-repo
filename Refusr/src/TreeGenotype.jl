@@ -43,7 +43,7 @@ end
 
 
 function Creature(config::NamedTuple)
-    terminals = generate_terminals(config.genotype.inputs_n)
+    terminals = generate_terminals(config.genotype.data_n)
     chromosome = grow(config.genotype.max_depth, terminals = terminals)
     fitness = fill(-Inf, config.selection.d_fitness)
     name = Names.rand_name(4)
@@ -57,8 +57,6 @@ function Creature(config::NamedTuple)
     )
 end
 
-"The material implication operator."
-(⊃)(a, b) = (!a) | b
 
 NONTERMINALS = [:& => 2, :| => 2, :~ => 1]
 
@@ -128,7 +126,7 @@ end
 
 function crossover(a::Creature, b::Creature; config = nothing)
     chromosomes = crossover(a.chromosome, b.chromosome)
-    terminals = generate_terminals(config.genotype.inputs_n)
+    terminals = generate_terminals(config.genotype.data_n)
     for g in chromosomes
         prune!(g, config.genotype.max_depth, terminals)
     end
@@ -151,14 +149,14 @@ function crossover(a::Creature, b::Creature; config = nothing)
 end
 
 function mutate(a::Expr; config=nothing)
-    terminals = generate_terminals(config.genotype.inputs_n)
+    terminals = generate_terminals(config.genotype.data_n)
     crossover(a, grow(depth, terminals=terminals), config=config)
 end
 
 
 function mutate!(a::Expr; config=nothing)
     depth = 3
-    terminals = generate_terminals(config.genotype.inputs_n)
+    terminals = generate_terminals(config.genotype.data_n)
     b = grow(depth, terminals = terminals)
     key, _ = random_subexpr(a)
     _, sub = random_subexpr(b)

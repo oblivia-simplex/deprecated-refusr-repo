@@ -15,6 +15,7 @@ include("TreeGenotype.jl")
 include("LinearGenotype.jl")
 include("step.jl")
 include("Z3Bridge.jl")
+include("Analysis.jl")
 
 meanfinite(s) = mean(filter(isfinite, s))
 stdfinite(s) = std(filter(isfinite, s))
@@ -27,8 +28,8 @@ end
 function prep_config(path)
     config = Cockatrice.Config.parse(path)
     data = CSV.read(config.selection.data, DataFrame)
-    n_inputs = ncol(data) - 1
-    config = @set config.genotype.inputs_n = n_inputs
+    data_n = ncol(data) - 1
+    config = @set config.genotype.data_n = data_n
     config
 end
 

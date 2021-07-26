@@ -11,7 +11,7 @@ using Espresso # Espresso actually implements some of the features
 # we already have here, but I think my implementation is faster.
 # It does seem much better for simplification, though. 
 
-export replace!, replace, count_subexpressions, enumerate_expr, truth_table, compile_expression
+export replace!, replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
 
 
 sympy = pyimport("sympy")
@@ -19,6 +19,11 @@ sympy = pyimport("sympy")
 function __init__()
     copy!(sympy, pyimport("sympy"))
 end
+
+
+nand(a,b) = ~(a & b)
+
+(⊃)(a, b) = (~a) | b
 
 function Base.replace!(e::Expr, p::Pair; all=true)
     old, new = p
@@ -167,6 +172,10 @@ end
 
 
 function simplify(e::Expr)
+    # For a first pass, let's use Espresso, which seems to be easier on memory.
+    @info "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
+    e = Espresso.simplify(e)
+    @info "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
     variables = variables_used(e)
     str(v) = "$(v.args[1])$(v.args[2])"
     D = [str(x) for x in variables if x.args[1] == :D] |> symbols
@@ -174,7 +183,10 @@ function simplify(e::Expr)
     x = evalwith(e, D=D, R=R)
     p = sympy.simplify(x)
     s = Meta.parse(p.__repr__())
-    replace(s, (x -> x isa Symbol) => demangle)
+    simple = replace(s, (x -> x isa Symbol) => demangle)
+    replace!(simple, :^ => :⊻)
+    @info "Simplified to:\n$(simple)"
+    return simple
 end
 
 
@@ -366,7 +378,7 @@ function structured_text(expr; config=nothing, comment = "")
     if isnothing(config)
         inputsize = variables_used_upper_bound(expr)
     else
-        inputsize = config.genotype.inputs_n
+        inputsize = config.genotype.data_n
     end
     st = expr |> structured_text_expr |> e -> StructuredTextTemplate.wrap(e, inputsize)
     if length(comment) > 0
@@ -440,12 +452,13 @@ end
 
 subscript(ref::Expr) = "$(ref.args[1])_{$(ref.args[2])}"
 
-function save_diagram(e::Expr, path)
+function save_diagram(e::Expr, path; tree=true)
     s = replace(e, (x -> x isa Expr && x.head == :ref) => (x -> Symbol(string(x))))
     Expressions.replace!(s, :~ => :NOT)
     Expressions.replace!(s, :& => :AND)
     Expressions.replace!(s, :| => :OR)
-    tikz = TreeView.walk_tree(s) |> TreeView.tikz_representation
+    graph = tree ? TreeView.walk_tree(s) : TreeView.make_dag(s)
+    tikz = TreeView.tikz_representation(graph)
     if endswith(path, "svg")
         save(SVG(path), tikz)
     elseif endswith(path, "tex")
@@ -456,9 +469,10 @@ function save_diagram(e::Expr, path)
 end
 
 
-function diagram(e::Expr; format="svg")
+function diagram(e::Expr; tree=true, format="svg")
     tmp = read(`mktemp /tmp/XXXXX.$(format)`, String) |> strip
-    save_diagram(e, tmp)
+    Base.rm(tmp) # to suppress warnings
+    save_diagram(e, tmp, tree=tree)
     dia = read(tmp, String)
     Base.rm(tmp)
     return dia

@@ -16,12 +16,15 @@ const RegType = Bool
 
 const mov = identity
 
+
 const OPS = [
-    #    (⊻, 2),
+    #(⊻, 2),
+    #(⊃, 2),
+    #(nand, 2),
     (|, 2),
     (&, 2),
     (~, 1),
-    (mov, 1), 
+    (mov, 1),
     #    (truth, 0),
     #    (falsity, 0), 
 ]
@@ -33,6 +36,20 @@ struct Inst
     # let's use the convention that negative indices refer to input
     dst::Int
     src::Int
+end
+
+## How many possible Insts are there, for N inputs?
+## Where there are N inputs, there are 2N possible src values and N possible dst
+## arity is fixed with op, so there are 4 possible op values
+number_of_possible_insts(n_input, n_reg; ops=OPS) = n_input * (n_input + n_reg) * length(ops)
+
+
+function number_of_possible_programs(n_input, n_reg, max_length) 
+    [number_of_possible_insts(n_input, n_reg)^BigFloat(i) for i in 1:max_length] |> sum
+end
+
+function number_of_possible_programs(config::NamedTuple)
+    number_of_possible_programs(config.genotype.data_n, config.genotype.registers_n, config.genotype.max_length)
 end
 
 
@@ -152,69 +169,6 @@ Base.@kwdef mutable struct Creature
 end
 
 
-function summarize(g)
-    symbolic = to_expr(g.chromosome) |> Expressions.simplify
-    svg = Expressions.diagram(symbolic, format="svg")
-    chrom_str = join(map(string, g.chromosome), "\n")
-    effec_str = isnothing(g.effective_code) ? "" : join(map(string, g.effective_code), "\n")
-
-    header = """
-title: Champion
-header-includes:
-- \\usepackage{fvextra}
-- \\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines, commandchars=\\\\\\{\\}}
-"""
-
-    return """
----
-$(header)
----
-
-# Name: $(g.name)
-## Generation: $(g.generation)
-
-
-## Chromosome
-
-```
-$(chrom_str)
-```
-
-## Effective Code
-
-```
-$(effec_str)
-```
-
-## Symbolic Expression:
-
-```
-$(symbolic)
-```
-
-### Syntax Tree
-
-$(svg)
-
-## Phenotype.results
-
-```
-$(join(string.(Int.(g.phenotype.results)), ""))
-```
-
-## Parents
-
-$(join(g.parents, "\n"))
-
-## Fitness
-
-`$(g.fitness)`
-
-## Performance: $(g.performance)
-"""
-end
-
-
 function random_program(n; ops=OPS, num_data=1, num_regs=1)
     [rand_inst(ops=ops, num_data=num_data, num_regs=num_regs) for _ in 1:n]
 end
@@ -223,7 +177,7 @@ end
 
 function Creature(config::NamedTuple)
     len = rand(config.genotype.min_len:config.genotype.max_len)
-    chromosome = [rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=config.genotype.inputs_n) for _ in 1:len]
+    chromosome = [rand_inst(ops=OPS, num_data=config.genotype.data_n, num_regs=config.genotype.registers_n) for _ in 1:len]
     fitness = Evo.init_fitness(config)
     Creature(chromosome=chromosome,
              effective_code=nothing,
@@ -318,7 +272,7 @@ end
 function mutate!(creature::Creature; config=nothing)
     inds = keys(creature.chromosome)
     i = rand(inds)
-    creature.chromosome[i] = rand_inst(ops=OPS, num_data=config.genotype.inputs_n, num_regs=config.genotype.inputs_n) 
+    creature.chromosome[i] = rand_inst(ops=OPS, num_data=config.genotype.data_n, num_regs=config.genotype.registers_n) 
     return
 end
 
@@ -374,7 +328,7 @@ end
 
 
 function execute(code, data; config, make_trace=true)::Tuple{RegType, BitArray}
-    num_regs = config.genotype.inputs_n
+    num_regs = config.genotype.registers_n
     max_steps = config.genotype.max_steps
     outreg = config.genotype.output_reg
     regs = zeros(RegType, num_regs)
@@ -394,9 +348,8 @@ end
 
 
 function execute_vec(code, INPUT; config, make_trace=true)
-    #num_regs = config.genotype.inputs_n
     D = INPUT'
-    R = BitArray(zeros(Bool, size(D)))
+    R = BitArray(zeros(Bool, (config.genotype.registers_n, size(D, 2))))
     max_steps = config.genotype.max_steps
     trace_len = max(1, min(length(code), max_steps))
     trace = zeros(Bool, size(R)..., trace_len) |> BitArray
@@ -484,7 +437,7 @@ end
 
 function structured_text(prog; config=nothing, comment="")
     prog = strip_introns(prog, [1])
-    num_regs = config.genotype.inputs_n
+    num_regs = config.genotype.registers_n
     reg_decl = """
 VAR
     R : ARRAY[1..$(num_regs)] OF BOOL;
@@ -496,7 +449,7 @@ END_VAR
 
     payload = reg_decl * body * out
 
-    inputsize = config.genotype.inputs_n
+    inputsize = config.genotype.data_n
     st = StructuredTextTemplate.wrap(payload, inputsize)
     if length(comment) > 0
         return "(*\n$(comment)\n*)\n\n$(st)"
