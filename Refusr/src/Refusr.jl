@@ -1,52 +1,37 @@
 using Distributed
-using CSV, DataFrames
-using Setfield
+__precompile__(false) # Precompilation is causing the system to OOM!
 
-if nprocs() == 1
-    p = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 4
-    addprocs(p, topology=:master_worker, exeflags="--project=$(Base.active_project())")
-else
-    @everywhere begin
-        using Pkg
-        Pkg.activate("$(@__DIR__)/..")
-        Pkg.instantiate()
-    end
+Base.Experimental.@optlevel 3
+
+CORES = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 1
+
+if CORES > 1
+    addprocs(CORES, topology=:master_worker, exeflags="--project=$(Base.active_project())")
 end
 
 @everywhere begin
-    @info "Preparing environment..."
-    using Pkg; Pkg.instantiate()
+    @info "Preparing environment on core $(myid()) of $(nworkers())..."
+    using Pkg
+    Pkg.instantiate()
 
     using DistributedArrays
+    using CSV, DataFrames
     using Statistics
     using Cockatrice.Config
     using Cockatrice.Evo: Tracer
     using Dates
 
     include("$(@__DIR__)/base.jl")
-    @info "Environment ready."
-
+    @info "Environment ready on core $(myid())."
 end
-
 
 
 using Cockatrice.Cosmos
 
-# this one's mostly for REPL use
-function init(;config_path="./config.yaml", fitness=nothing, tracers=TRACERS)
-    config = Config.parse(config_path)
-    if fitness === nothing
-        fitness = get_fitness_function(config, FF)
-    end
-    Cosmos.δ_init(config=config,
-                  fitness=fitness,
-                  crossover=LinearGenotype.crossover,
-                  mutate=LinearGenotype.mutate!,
-                  creature_type=LinearGenotype.Creature,
-                  tracers=tracers)
+function log_to_terminal(L::Cockatrice.Logging.Logger)
+    @info "in callback"
+    println(L.table[end,:])
 end
-
-
 
 function launch(config_path)
     config = prep_config(config_path)
@@ -63,18 +48,15 @@ function launch(config_path)
               :loggers => LOGGERS,
               :stopping_condition => stopping_condition,
               :objective_performance => objective_performance,
+              :cores => CORES,
+              :callback => log_to_terminal,
               ]
-    world, logger = Cosmos.δ_run(;params...)
-    world = collect(world)
+    world, logger = Cosmos.run(;params...)
     # FIXME # Base.kill(Distributed.workers())
     elites = [w.elites[1] for w in world]
     champion = sort(elites, by=objective_performance)[end]
     @info "Preparing summary of champion $(champion.name) and simplifying expression..."
-    champion_md = Analysis.summarize(champion)
-    #println("Champion:\n$(champion_md)")
-    @info "Saving report to file://$(pwd())/$(logger.log_dir)/champion.html"
-    write("$(logger.log_dir)/champion.md", champion_md)
-    run(`pandoc $(logger.log_dir)/champion.md -o $(logger.log_dir)/champion.html`)
+    champion_html = Analysis.summarize(logger, champion)
+    @info "Saved report to file://$(champion_html)"
     return (world=world, logger=logger, champion=champion)
-    
 end

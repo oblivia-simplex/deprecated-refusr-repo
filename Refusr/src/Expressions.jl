@@ -2,6 +2,7 @@
 module Expressions
 
 using PyCall
+using Graphs
 using TikzPictures
 using TreeView
 using DataFrames
@@ -171,21 +172,24 @@ function demangle(s::Symbol)
 end
 
 
-function simplify(e::Expr)
+function simplify(e::Expr; use_espresso=false)
     # For a first pass, let's use Espresso, which seems to be easier on memory.
-    @info "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
-    e = Espresso.simplify(e)
-    @info "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
+    @info "Simplifying expression with $(count_subexpressions(e)) subexpressions..."
+    if use_espresso 
+        @info "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
+        @time e = Espresso.simplify(e)
+        @info "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
+    end
     variables = variables_used(e)
     str(v) = "$(v.args[1])$(v.args[2])"
     D = [str(x) for x in variables if x.args[1] == :D] |> symbols
     R = [str(x) for x in variables if x.args[1] == :R] |> symbols
     x = evalwith(e, D=D, R=R)
-    p = sympy.simplify(x)
+    @time p = sympy.simplify(x)
     s = Meta.parse(p.__repr__())
     simple = replace(s, (x -> x isa Symbol) => demangle)
     replace!(simple, :^ => :⊻)
-    @info "Simplified to:\n$(simple)"
+    @info "Simplified to:\n$(simple)\nwith $(count_subexpressions(simple))..."
     return simple
 end
 
@@ -476,6 +480,11 @@ function diagram(e::Expr; tree=true, format="svg")
     dia = read(tmp, String)
     Base.rm(tmp)
     return dia
+end
+
+
+function expression_graph(e::Expr)
+
 end
 
 end # module Expressions
