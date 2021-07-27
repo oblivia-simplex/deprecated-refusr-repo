@@ -1,53 +1,10 @@
-using Dash
-using DashHtmlComponents
-using DashCoreComponents
-using PlotlyBase
-using UrlDownload
-using DataFrames
+include("Refusr.jl")
 
-df1 = DataFrame(urldownload("https://raw.githubusercontent.com/plotly/datasets/master/gapminderDataFiveYear.csv"))
+config = prep_config("$(@__DIR__)/../config/config-2MUX-sharing.yaml")
 
-years = unique(df1[!, :year])
-
-app = dash()
-
-app.layout = html_div() do
-    dcc_graph(id = "graph"),
-    dcc_slider(
-        id = "year-slider-1",
-        min = minimum(years),
-        max = maximum(years),
-        marks = Dict([Symbol(v) => Symbol(v) for v in years]),
-        value = minimum(years),
-        step = nothing,
-    )
-end
-
-callback!(
-    app,
-    Output("graph", "figure"),
-    Input("year-slider-1", "value"),
-) do selected_year
-    return Plot(
-        df1[df1.year .== selected_year, :],
-        Layout(
-            xaxis_type = "log",
-            xaxis_title = "GDP Per Capita",
-            yaxis_title = "Life Expectancy",
-            legend_x = 0,
-            legend_y = 1,
-            hovermode = "closest",
-            transition_duration = 50
-        ),
-        x = :gdpPercap,
-        y = :lifeExp,
-        text = :country,
-        group = :continent,
-        mode = "markers",
-        marker_size = 15,
-        marker_line_color = "white",
-    )
-end
+cb = make_logging_callback(config)
 
 
-run_server(app, "0.0.0.0", 8050, debug = true)
+@info "serving at port 9123"
+
+readline()
