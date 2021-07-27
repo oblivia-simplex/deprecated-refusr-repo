@@ -1,9 +1,25 @@
-using Cockatrice
+using Pkg
+Pkg.activate("$(@__DIR__)/..")
+Pkg.instantiate()
 
-using CSV, DataFrames
+
+using Blink
+using CSV
+using Cockatrice
+using Cockatrice.Config
+using Cockatrice.Cosmos
+using Cockatrice.Evo: Tracer
+using Dash
+using DashCoreComponents
+using DashHtmlComponents
+using DataFrames
+using Dates
+using DistributedArrays
+using FunctionWrappers: FunctionWrapper
+using InformationMeasures
+using PlotlyBase
 using ProgressMeter
 using Setfield
-using InformationMeasures
 using Statistics
 
 include("BitEntropy.jl")
@@ -24,12 +40,21 @@ function get_likeness(g)
     isnothing(g.likeness) ? -Inf : maximum(g.likeness)
 end
 
+DEFAULT_CONFIG_FIELDS = [
+    ["dashboard", "port"] => 9123,
+    ["dashboard", "server"] => "0.0.0.0",
+    ["step_duration"] => 1,
+    ["preserve_population"] => false,
+    ["experiment"] => Names.rand_name(2),
+    ["selection", "t_size"] => 6,
+    ["selection", "lexical"] => true,
+]
 
 function prep_config(path)
-    config = Cockatrice.Config.parse(path)
+    config = Cockatrice.Config.parse(path, DEFAULT_CONFIG_FIELDS)
     data = CSV.read(config.selection.data, DataFrame)
     data_n = ncol(data) - 1
-    #config = @set config.genotype.data_n = data_n
+    config = @set config.genotype.data_n = data_n
     config
 end
 
@@ -81,6 +106,8 @@ LOGGERS = [
     #(key="likeness", reducer=meanfinite),
 ]
 
+pipinstall(package) = run(`$(PyCall.python) -m pip install $(package)`)
+
 
 ## To facilitate debugging
 function mkevo(config="./config.yaml")
@@ -88,4 +115,6 @@ function mkevo(config="./config.yaml")
     FF._set_data(config.selection.data)
     Cockatrice.Evo.Evolution(config, creature_type=LinearGenotype.Creature, fitness=FF.fit, tracers=TRACERS, mutate=LinearGenotype.mutate!, crossover=LinearGenotype.crossover, objective_performance=objective_performance)
 end
+
+
 
