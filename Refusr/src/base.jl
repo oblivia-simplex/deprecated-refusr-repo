@@ -2,9 +2,9 @@ using Cockatrice
 
 using CSV, DataFrames
 using ProgressMeter
+using Setfield
 using InformationMeasures
 using Statistics
-using Setfield
 
 include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
@@ -29,7 +29,7 @@ function prep_config(path)
     config = Cockatrice.Config.parse(path)
     data = CSV.read(config.selection.data, DataFrame)
     data_n = ncol(data) - 1
-    config = @set config.genotype.data_n = data_n
+    #config = @set config.genotype.data_n = data_n
     config
 end
 
@@ -46,18 +46,18 @@ function objective_performance(g)
     return g.performance
 end
 
-stopping_condition(evo) = (objective_performance.(evo.elites) |> maximum) == 1.0
+stopping_condition(evo) = !isempty(evo.elites) && (objective_performance.(evo.elites) |> maximum) == 1.0
 
 TRACERS = [
-    (key="objective", callback=objective_performance, rate=0.1),
-    (key="fitness_1", callback=g->g.fitness[1], rate=0.1),
-    (key="fitness_2", callback=g->g.fitness[2], rate=0.1),
+    (key="objective", callback=objective_performance, rate=0.01),
+    (key="fitness_1", callback=g->g.fitness[1], rate=0.01),
+    (key="fitness_2", callback=g->g.fitness[2], rate=0.01),
     #(key="fitness_3", callback=g->g.fitness[3], rate=1.0),
-    (key="chromosome_len", callback=g->length(g.chromosome), rate=0.1),
-    (key="effective_len", callback=g->isnothing(g.effective_code) ? -Inf : length(g.effective_code), rate=0.1),
-    (key="num_offspring", callback=g->g.num_offspring, rate=0.1),
-    (key="generation", callback=g->g.generation, rate=0.1),
-    #(key="likeness", callback=get_likeness, rate=0.1),
+    (key="chromosome_len", callback=g->length(g.chromosome), rate=0.01),
+    (key="effective_len", callback=g->isnothing(g.effective_code) ? -Inf : length(g.effective_code), rate=0.01),
+    (key="num_offspring", callback=g->g.num_offspring, rate=0.01),
+    (key="generation", callback=g->g.generation, rate=0.01),
+    #(key="likeness", callback=get_likeness, rate=0.01),
 ]
 
 

@@ -1,0 +1,54 @@
+Things to write about:
+* DONE Findings regarding ACE11 and the Velocio protocol
+* DONE Probing of the binary that it creates with the vBuilder "to file" option
+* DONE Summary of the status of Velocio protocol reversing
+* DONE OpenPLC
+* TODO ACE1600
+
+* ACE11 and the USB protocol
+After capturing the data that is sent to the PLC when you compile and run a program from vBuilder its clear that the protocol over the wire is some type of binary, serial protocol.
+The protocol structure seems to be as following:
+- Preamble in the form of a four byte prefix (0x56 0xff 0xff 0x00)
+- One byte length field, which includes the length of the preamble unlike how MODBUS usually calculates length beginning (and including) from the length byte
+- One byte function code/type that denotes which "class" of function that is being called
+- One byte function selector that denotes which function is actually called
+- Variable length of actual payload data, spanning from one to several tens of bytes
+Seeing as its a proprietary protocol, the information about its structure is very scarce, but there are a few resources that have helped in mapping some of the functions in the protocol including:
+- [[https://github.com/jsr5194/Velocio-ace-remote][A python script to send commands to the ACE PLCs]]
+- [[https://github.com/ControlThings-io/ctVelocio][Another python script to send commands to the ACE PLCs]] made by a well known Industrial Control Systems (ICS) penetration tester, Justin Searle
+- Justin Searle also reached out and helped us by providing a barebone dissector for the Velocio protocol for Wireshark
+It was clear that it was a protocol that resembled MODBUS RTU, which is logical as MODBUS RTU is typically what is used by a controller to read/write registers ("coils") on sensors and other field equipment used in ICS.
+From the resources about what commands there are for the PLC we can deduce the following:
+- function code 0xf1 contains debug controls (play, pause, step functions, reset)
+- function code 0xf0 contains the commands to enter/exit debug mode
+- function code 0x11 deals with setting output pins on/off
+- function code 0x0a deals with reading input/output bits
+- function code 0x09 seems to denote that it contains a human-readable ASCII substring, with function code 0x12 being used to give the file name for the source code that the code was compiled from
+
+From the read functions we can deduce that it counts pins starting from 0x01 and incrementing it by one for each pin, starting with the input pins. 
+This means that for the ACE11 that has six digital inputs/outputs, 0x01 to 0x06 is the input pins and 0x07 to 0x0c is the output pins.
+For setting output pins, the protocol uses the 18th byte as a bitfield to denote which pin is to be set instead of using a sequential number to denote the pin to be set, like the read instructions do.
+
+Another observation regarding the data that was being sent was that at the very end of the data stream, the human-readable labels from vBuilder was sent to the PLC, in 16-byte, space-padded fields.
+These labels were most likely sent to the device so that when you develop a HMI for the system that the PLC is part of, it can read the labels from the device and giving the HMI developer a hint of what the input/output is used for.
+That way a HMI developer doesn't have to have a separate document with mappings of what "coil" or register controls contains what type of value and so on.
+
+* OpenPLC (Lucca, please go over this section so that I haven't used any of the "math terms" incorrectly or described the tooling you and Anthony made incorrectly/weird)
+While reversing the binary that vBuilder outputs to the PLC, it became more and more obvious that it would be a non-trivial task to reverse engineer enough of the protocol to be able to programmatically control both the running of the PLC and program it.
+It was decided that another way was needed to be done in parallel so that the work with the modeling and AI wasn't blocked by the reversing of the Velocio protocol.
+It turns out that there exist a project called [[https://www.openplcproject.com/][OpenPLC]] that turns commodity hardware, like Raspberry Pis, into fully functional PLCs, that are programmed with a language called Structured Text (ST).
+It seemed to fit what was needed to at least get a start on the whole symbolic regression modelling and to make the tooling that will later be used to generate, programmatically, the dataset of boolean functions that will be implemented on a PLC.
+As the PLC was going to be treated as a black box function, with only the input and output values being available to the model, a program that generates a n-input mux was made to generate the initial dataset.
+Another program was made that can generate random boolean functions, and the output of these programs will be fed into a program that can turn that into ST programs that then gets uploaded to the OpenPLC device.
+
+* ACE1600
+In addition to the ACE11, another of the entry-level PLCs that Velocio offers, the ACE1600, brings another interesting thing to the table, that will hopefully ease the programmatical instrumentation of it.
+The ACE1600 is a three digital input, six digital output and one RS232, that speaks MODBUS RTU, PLC in the same form factor as the ACE11.
+The fact that its configured to act as a MODBUS RTU slave device, is the reason why its very interesting from our viewpoint.
+MODBUS is a controller-slave protocol, where the controller reads/writes coils or registers of the slave devices, which is exactly what is needed when programmatically instrumenting a device.
+Through the MODBUS protocol, the hope is that the PLC can be connected to the model/AI as a pure black box that the model/AI can give different inputs and then read the outputs to get data for its calculations.
+Another thing it brings to the table is that its programmed with the same program as the ACE11, vBuilder, which means that we can compile the same program to both the ACE11 and ACE1600 and use that to help the reverse engineering effort.
+That way, the binaries it creates can be compared to see what is the same in both compiled programs and what is not, which will help to figure out what is static, boilerplate, what is the actual program and what is the connections diagram of the binary.
+This will hopefully lead to that we can use whichever Velocio PLC as our black box in the long run, which opens for creating better black boxes to train our models on.
+Another thing it will mean is that we can use our PLC program generator, that generates ST programs for OpenPLC, to generate programs to be run on the ACE PLCs too.
+This means that more of the actual testing and learning can be automated.
