@@ -31,8 +31,7 @@ function Base.replace!(e::Expr, p::Pair; all=true)
     oldpred = old isa Function ? old : x -> typeof(x) == typeof(old) && x == old
     mknew = new isa Function ? new : _ -> deepcopy(new)
     if oldpred(e)
-        oldpred(e)
-        return mknew(deepcopy(e))
+        return mknew(e)
     end
     for i in eachindex(e.args)
         if oldpred(e.args[i])
@@ -50,6 +49,23 @@ end
 function Base.replace(e::Expr, p::Pair; all=true)
     Base.replace!(deepcopy(e), p, all=all)
 end
+
+function replace_atom(e, p::Pair; all=true)
+    old, new = p
+    oldpred = old isa Function ? old : x -> typeof(x) == typeof(old) && x == old
+    mknew = new isa Function ? new : _ -> deepcopy(new)
+    if oldpred(e)
+        return mknew(e)
+    else
+        return e
+    end
+end
+
+
+Base.replace(s::Symbol, p::Pair; all=true) = replace_atom(s, p, all=all)
+Base.replace(s::Bool, p::Pair; all=true) = replace_atom(s, p, all=all)
+
+
 
 
 count_subexpressions(x) = 0
@@ -157,10 +173,22 @@ prune!(e, depth, terminals) = nothing
 
 _simplify(e) = Espresso.simplify(e)
 
-symbols(v::Vector{String}) = isempty(v) ? [] : sympy.symbols(join(v, " ")) |> collect
-
+function symbols(v::Vector{String})
+    if isempty(v)
+        PyObject[]
+    elseif length(v) == 1
+        [sympy.symbols(v[1])]
+    else
+        sympy.symbols(join(v, " ")) |> collect
+    end
+end
 
 function demangle(s::Symbol)
+    if s == :True
+        return true
+    elseif s == :False
+        return false
+    end
     st = string(s)
     if st[1] ∈ "RD"
         letter = Symbol(st[1])
@@ -172,24 +200,36 @@ function demangle(s::Symbol)
 end
 
 
-function simplify(e::Expr; use_espresso=false)
+demangle_helper(s::Symbol) = demangle(s)
+demangle_helper(s::Expr) = replace(s, (x -> x isa Symbol) => demangle)
+demangle_helper(s) = s
+
+simplify(b::Bool; kwargs...) = b
+simplify(s::Symbol; kwargs...) = s
+
+function simplify(e::Expr; use_espresso=true)
     # For a first pass, let's use Espresso, which seems to be easier on memory.
-    @info "Simplifying expression with $(count_subexpressions(e)) subexpressions..."
+    @debug "Simplifying expression with $(count_subexpressions(e)) subexpressions:\n$(e)"
     if use_espresso 
-        @info "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
-        @time e = Espresso.simplify(e)
-        @info "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
+        @debug "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
+        e = Espresso.simplify(e)
+        @debug "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
     end
-    variables = variables_used(e)
+
+    Rn = variables_used_upper_bound(e, :R)
+    Dn = variables_used_upper_bound(e, :D)
+    
     str(v) = "$(v.args[1])$(v.args[2])"
-    D = [str(x) for x in variables if x.args[1] == :D] |> symbols
-    R = [str(x) for x in variables if x.args[1] == :R] |> symbols
+    D = ["D$(i)" for i in 1:Dn] |> symbols
+    R = ["R$(i)" for i in 1:Rn] |> symbols
     x = evalwith(e, D=D, R=R)
-    @time p = sympy.simplify(x)
+    p = sympy.simplify(x)
     s = Meta.parse(p.__repr__())
-    simple = replace(s, (x -> x isa Symbol) => demangle)
-    replace!(simple, :^ => :⊻)
-    @info "Simplified to:\n$(simple)\nwith $(count_subexpressions(simple))..."
+    simple = demangle_helper(s)
+    if simple isa Expr
+        replace!(simple, :^ => :⊻)
+    end
+    @debug "Simplified to:\n$(simple)\nwith $(count_subexpressions(simple))..."
     return simple
 end
 
@@ -265,8 +305,9 @@ function compile_expression(expr::Expr)
 end
 
 
-function variables_used_upper_bound(expr)
-    [a.args[2] for a in variables_used(expr)] |> maximum
+function variables_used_upper_bound(expr, letter=:D)
+    v = [a.args[2] for a in variables_used(expr) if a.args[1] == letter]
+    isempty(v) ? 0 : maximum(v)
 end
 
 
@@ -465,11 +506,16 @@ function save_diagram(e::Expr, path; tree=true)
     tikz = TreeView.tikz_representation(graph)
     if endswith(path, "svg")
         save(SVG(path), tikz)
+    elseif endswith(path, "png")
+        svg_path = replace(path, "png" => "svg")
+        save(SVG(svg_path), tikz)
+        run(`inkscape --export-png=$(path) $(svg_path)`)
     elseif endswith(path, "tex")
         save(TEX(path), tikz)
     elseif endswith(path, "pdf")
         save(PDF(path), tikz)
     end
+    return path
 end
 
 

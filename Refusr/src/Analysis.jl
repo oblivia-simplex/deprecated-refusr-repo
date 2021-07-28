@@ -15,60 +15,34 @@ function IM_images(L::Logger, IM)
 end
 
 
-function summarize(L::Logger, g)
-    symbolic = LinearGenotype.to_expr(g.chromosome) 
-    simple = Expressions.simplify(symbolic)
-
-    DIR = pwd()
-    cd(L.log_dir)
-    # Create some syntax graphs
-    img_path = "img/"
-    mkpath(img_path)
-    syntax_tree_path = "$(img_path)/champion_ast.svg"
-    syntax_dag_path = "$(img_path)/champion_dag.svg"
-    Expressions.save_diagram(simple, syntax_tree_path, tree=true)
-    Expressions.save_diagram(simple, syntax_dag_path, tree=false)
+function summarize(L::Logger, g; label=g.name, decompile=true, make_pdf=false)
+    @info "Preparing summary of $(g.name)..."
+    specimen_dir = "$(L.log_dir)/specimens"
+    mkpath(specimen_dir)
 
     chrom_str = join(map(string, g.chromosome), "\n")
     effec_str = isnothing(g.effective_code) ? "" : join(map(string, g.effective_code), "\n")
 
-    header = """
-title: Champion
-header-includes:
-- \\usepackage{fvextra}
-- \\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines, commandchars=\\\\\\{\\}}
-"""
+    @info "Effective Code:\n$effec_str"
 
-    md = """
----
-$(header)
----
+    @info "Converting to symbolic expression..."
 
-# Name: $(g.name)
-## Generation: $(g.generation)
+    decompiled = if decompile
+        simple = LinearGenotype.decompile(g)
+        #simple = Expressions.simplify(symbolic, use_espresso=true)
 
+        # Create some syntax graphs
+        img_path = "$(L.log_dir)/img/"
+        mkpath(img_path)
+        syntax_tree_path = "$(img_path)/champion_ast.svg"
+        syntax_dag_path = "$(img_path)/champion_dag.svg"
+        Expressions.save_diagram(simple, syntax_tree_path, tree=true)
+        Expressions.save_diagram(simple, syntax_dag_path, tree=false)
 
-## Chromosome
+        """
+## Symbolic Representation
 
-```
-$(chrom_str)
-```
-
-## Effective Code
-
-```
-$(effec_str)
-```
-
-## Symbolic Expression:
-
-### Translated from Linear Code
-
-```
-$(symbolic)
-```
-
-### Simplified
+### Decompiled from Linear Code and Simplified
 
 ```
 $(simple)
@@ -80,9 +54,55 @@ $(simple)
 ![Syntax tree for $(g.name)]($(syntax_tree_path))
 
 
-### Directed Acyclic Graph
+### Directed Acyclic Graph of Simplified Expression
 
 ![Syntax DAG for $(g.name)]($(syntax_dag_path))
+"""
+    else
+        ""
+    end # End of decompile conditional
+
+        header = make_pdf ? """
+---
+title: Champion
+header-includes:
+- \\usepackage{fvextra}
+- \\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines, commandchars=\\\\\\{\\}}
+---
+""" : ""
+
+    Title = label == "champion" ? "Champion Report" : "Specimen Report"
+
+    md = """
+$(header)
+
+# $(Title)
+
+- Name: $(g.name)
+- Generation: $(g.generation)
+- Parents: $(join(g.parents, ", "))
+- Number of Offspring: $(g.num_offspring)
+- Phenotypic Resemblance to Parents: $(join(string.(g.likeness), ", "))
+- Fitness Scores: $(join(string.(g.fitness), ", "))
+- **Performance: $(g.performance)**
+
+## Chromosome
+
+$(length(g.chromosome)) Instructions
+
+```
+$(chrom_str)
+```
+
+## Effective Code
+
+$(length(g.effective_code)) Instructions
+
+```
+$(effec_str)
+```
+
+$(decompiled)
 
 ## Phenotype.results
 
@@ -90,22 +110,16 @@ $(simple)
 $(join(string.(Int.(g.phenotype.results)), ""))
 ```
 
-## Parents
-
-$(join(g.parents, "\n"))
-
 ## Fitness
 
 `$(g.fitness)`
 
-## Performance: $(g.performance)
 """
-    md_path = "champion.md"
-    html_path = "champion.html"
+    md_path = "$(specimen_dir)/$(label).md"
     write(md_path, md)
-    run(`pandoc $(md_path) -o $(html_path)`)
-    cd(DIR)
-    return "$(L.log_dir)/$(html_path)"
+    #html_path = "champion.html"
+    #run(`pandoc $(md_path) -o $(html_path)`)
+    return md_path
 end
 
 
