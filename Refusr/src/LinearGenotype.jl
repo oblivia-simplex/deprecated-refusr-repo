@@ -136,9 +136,14 @@ function to_expr(inst::Inst)
     end
 end
 
-DEFAULT_EXPR = :(R[1] = false)
+DEFAULT_EXPR = false
 
-function to_expr(code::Vector{Inst})
+# FIXME: there's a semantic bug in here.
+# The truth table of the resulting expression isn't always equivalent to the
+# execution result of the program.
+
+function to_expr(code::Vector{Inst}; incremental_simplify=true)
+    threshold = 6
     code = strip_introns(code, [1])
     isempty(code) && return DEFAULT_EXPR
     expr = pop!(code) |> to_expr
@@ -148,10 +153,17 @@ function to_expr(code::Vector{Inst})
         e = pop!(code) |> to_expr
         @assert e.head == :(=)
         lhs, rhs = e.args
-        Expressions.replace!(RHS, lhs=>rhs)
+        RHS = Expressions.replace(RHS, lhs=>rhs)
+        if incremental_simplify && Expressions.count_subexpressions(RHS) > threshold
+            RHS = Expressions.simplify(RHS)
+        end
     end
-    Expressions.replace!(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
-    RHS
+    RHS = Expressions.replace(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
+    if incremental_simplify
+        Expressions.simplify(RHS)
+    else
+        RHS
+    end
 end
         
 
@@ -163,10 +175,29 @@ Base.@kwdef mutable struct Creature
     name::String
     generation::Int
     num_offspring::Int = 0
-    parents = nothing
-    likeness = nothing
+    parents = []
+    likeness = []
     performance = nothing
+    symbolic = nothing
 end
+
+
+function decompile(g::Creature; cache=true, incremental_simplify=true)
+    if !isnothing(g.symbolic) && cache
+        return g.symbolic
+    end
+    @debug "Decompiling $(g.name)'s chromosome..."
+    if isnothing(g.effective_code)
+        g.effective_code = strip_introns(g.chromosome, [1])
+    end
+    symbolic = to_expr(g.effective_code, incremental_simplify=incremental_simplify)
+    if cache
+        g.symbolic = symbolic
+    end
+    return symbolic
+end
+
+
 
 
 function random_program(n; ops=OPS, num_data=1, num_regs=1)

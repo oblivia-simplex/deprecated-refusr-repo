@@ -1,5 +1,5 @@
-experiment_duration: 100
-step_duration: 2
+experiment_duration: 200
+step_duration: 10
 preserve_population: true
 experiment: "2MUX-with-sharing"
 
@@ -10,14 +10,14 @@ selection:
   t_size: 6
   fitness_sharing: true
   trace: true
-  lexical: true
+  lexical: false
 
 genotype:
   max_depth: 8
   min_len: 4
   max_len: 100
   data_n: 6
-  registers_n: 3
+  registers_n: 4
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1

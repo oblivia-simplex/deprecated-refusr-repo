@@ -1,6 +1,7 @@
 #! /bin/sh
 
 export GTK_PATH="/usr/lib/x86_64-linux-gnu/gtk-3.0:$PATH"
+export DASH_HOT_RELOAD=0
 
 [ -n "$REFUSR_PROCS" ] || REFUSR_PROCS=$2
 [ -n "$REFUSR_PROCS" ] || REFUSR_PROCS=4
