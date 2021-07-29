@@ -399,12 +399,12 @@ end
 callback!(
     UI,
     Output("table-container", "children"),
-    Output("plot-container", "children"),
+#    Output("plot-container", "children"),
     Input("table-refresh", "n_clicks"),
     State("stats-dropdown", "value")
 ) do clicks, cols
-    (generate_table(LOGGER.table, 10),
-     plot_stat(LOGGER.table, cols=cols, title="Time Series Plot"))
+    generate_table(LOGGER.table, 10)
+    # plot_stat(LOGGER.table, cols=cols, title="Time Series Plot")
 end
 
 
