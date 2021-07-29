@@ -136,36 +136,33 @@ function to_expr(inst::Inst)
     end
 end
 
-DEFAULT_EXPR = false
 
-# FIXME: there's a semantic bug in here.
-# The truth table of the resulting expression isn't always equivalent to the
-# execution result of the program.
-
-function to_expr(code::Vector{Inst}; incremental_simplify=true)
-    threshold = 6
-    code = strip_introns(code, [1])
-    isempty(code) && return DEFAULT_EXPR
+function to_expr(code::Vector{Inst}; intron_free=true, incremental_simplify=true)
+    DEFAULT_EXPR = false
+    code = intron_free ? copy(code) : strip_introns(code, [1])
+    if isempty(code)
+        return DEFAULT_EXPR
+    end
     expr = pop!(code) |> to_expr
-    @assert expr.head == :(=)
     LHS, RHS = expr.args
     while !isempty(code)
         e = pop!(code) |> to_expr
-        @assert e.head == :(=)
         lhs, rhs = e.args
         RHS = Expressions.replace(RHS, lhs=>rhs)
-        if incremental_simplify && Expressions.count_subexpressions(RHS) > threshold
+        if incremental_simplify
             RHS = Expressions.simplify(RHS)
         end
     end
+    # Since we initialize the R registers to `false`, any remaining R references
+    # can be replaced with `false`.
     RHS = Expressions.replace(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
     if incremental_simplify
-        Expressions.simplify(RHS)
+        return Expressions.simplify(RHS)
     else
-        RHS
+        return RHS
     end
 end
-        
+ 
 
 Base.@kwdef mutable struct Creature
     chromosome::Vector{Inst}
@@ -182,22 +179,22 @@ Base.@kwdef mutable struct Creature
 end
 
 
-function decompile(g::Creature; cache=true, incremental_simplify=true)
-    if !isnothing(g.symbolic) && cache
+function decompile(g::Creature; assign=true, incremental_simplify=true)
+    if !isnothing(g.symbolic) && assign
         return g.symbolic
     end
     @debug "Decompiling $(g.name)'s chromosome..."
     if isnothing(g.effective_code)
         g.effective_code = strip_introns(g.chromosome, [1])
     end
-    symbolic = to_expr(g.effective_code, incremental_simplify=incremental_simplify)
-    if cache
+    symbolic = to_expr(g.effective_code,
+                       intron_free=true,
+                       incremental_simplify=incremental_simplify)
+    if assign
         g.symbolic = symbolic
     end
     return symbolic
 end
-
-
 
 
 function random_program(n; ops=OPS, num_data=1, num_regs=1)

@@ -109,6 +109,8 @@ LOGGERS = [
 pipinstall(package) = run(`$(PyCall.python) -m pip install $(package)`)
 
 
+# Debugging tools
+
 ## To facilitate debugging
 function mkevo(config="./config.yaml")
     config = prep_config(config)
@@ -118,3 +120,37 @@ end
 
 
 
+function stuff_logger!(L, rows=100)
+    ac = 0
+    for i in 1:rows
+        stats = rand(ncol(L.table)-1)
+        ac += i * rand() * 1000
+        r = [ac, stats...]
+        push!(L.table, r)
+    end
+end # end module
+
+
+function stuff_im_log!(L, num=100, isles=8)
+    p = 10 * 10
+    c = 64
+    for i in 1:num
+        ims = [rand(Bool, c, p) |> BitArray
+               for _ in 1:isles]
+        push!(L.im_log, ims)
+    end
+end
+
+
+function fake_logger()
+    config = prep_config("./config/config-2MUX-sharing.yaml")
+    L = Cockatrice.Logging.Logger(LOGGERS, config)
+    stuff_logger!(L)
+    stuff_im_log!(L)
+    evoL = mkevo()
+    @showprogress for i in 1:100; Cockatrice.Evo.step!(evoL); end
+    for i in 1:100
+        push!(L.specimens, rand(evoL.geo.deme))
+    end
+    return L, evoL
+end
