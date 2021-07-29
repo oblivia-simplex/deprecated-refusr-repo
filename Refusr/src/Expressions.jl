@@ -2,7 +2,10 @@
 module Expressions
 
 using PyCall
+using Dates
 using Graphs
+using Memoize
+using LRUCache
 using TikzPictures
 using TreeView
 using DataFrames
@@ -200,21 +203,83 @@ function demangle(s::Symbol)
 end
 
 
+function mangle(e)
+    Symbol("$(e.args[1])$(e.args[2])")
+end
+
+
+function mangle_expr(e)
+    replace(e, (x -> x isa Expr && x.head === :ref) => mangle)
+end
+
 demangle_helper(s::Symbol) = demangle(s)
 demangle_helper(s::Expr) = replace(s, (x -> x isa Symbol) => demangle)
 demangle_helper(s) = s
 
-simplify(b::Bool; kwargs...) = b
-simplify(s::Symbol; kwargs...) = s
+simplify(b::Bool) = b
+simplify(s::Symbol) = s
 
-function simplify(e::Expr; use_espresso=true)
+Cache() = LRU{Expr, Union{Bool, Expr, Symbol}}(maxsize=2^20, by=Base.summarysize)
+
+USE_CACHE = true
+
+function _use_cache(b::Bool)
+    global USE_CACHE
+    USE_CACHE = b
+end
+
+
+           
+
+const __simplify = let CACHE = Cache(),
+    hits = 0,
+    queries = 0,
+    cache_time = 0
+function simplify_(expr::Expr)::Union{Bool, Expr, Symbol}
+    use_espresso = true
+
+    function check_cache(expr)
+        if USE_CACHE
+            start_at = now()
+            #queries > 0 && @info "Cache stats" hits queries (hits / queries) CACHE.currentsize (CACHE.currentsize / CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+            try
+                result = CACHE[expr]
+                hits += 1
+                cache_time += (now() - start_at).value
+                return result
+            catch KeyError
+                queries += 1
+                cache_time += (now() - start_at).value
+                return nothing
+            end
+        end
+    end
+
+    function cache(expr, result)
+        if USE_CACHE
+            start_at = now()
+            CACHE[expr] = result
+            cache_time += (now() - start_at).value
+        end
+    end
+
+    res = check_cache(expr)
+    !isnothing(res) && return res
+
     # For a first pass, let's use Espresso, which seems to be easier on memory.
     @debug "Simplifying expression with $(count_subexpressions(e)) subexpressions:\n$(e)"
-    if use_espresso 
+    e = if use_espresso 
         @debug "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
-        e = Espresso.simplify(e)
+        e = Espresso.simplify(expr)
         @debug "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
+        e
+    else
+        expr
     end
+
+    # Now let's check to see if the Espresso-reduced expression is in the cache
+    res = check_cache(e)
+    !isnothing(res) && return res
 
     Rn = variables_used_upper_bound(e, :R)
     Dn = variables_used_upper_bound(e, :D)
@@ -230,13 +295,16 @@ function simplify(e::Expr; use_espresso=true)
         replace!(simple, :^ => :⊻)
     end
     @debug "Simplified to:\n$(simple)\nwith $(count_subexpressions(simple))..."
+    cache(expr, simple)
+ 
     return simple
 end
+end # end closure
+
+simplify(e::Expr) = __simplify(e)
 
 
-
-
-
+flush_cache!() = empty!(__simplify.CACHE)
 
 
 function evalwith(g; D, R=[])
@@ -281,12 +349,13 @@ end
 
 variables_used!(acc, literal::Bool) = nothing
 
-function variables_used(expr)
-    acc = []
-    variables_used!(acc, expr)
-    sort!(acc, by = s -> s.args[2])
-    unique!(acc)
-    acc
+@inline function variables_used(expr)
+#    acc = []
+#    variables_used!(acc, expr)
+#    sort!(acc, by = s -> s.args[2])
+#    unique!(acc)
+#    acc
+    Espresso.find_vars(expr)
 end
 
 
@@ -499,9 +568,11 @@ subscript(ref::Expr) = "$(ref.args[1])_{$(ref.args[2])}"
 
 function save_diagram(e::Expr, path; tree=true)
     s = replace(e, (x -> x isa Expr && x.head == :ref) => (x -> Symbol(string(x))))
-    Expressions.replace!(s, :~ => :NOT)
-    Expressions.replace!(s, :& => :AND)
-    Expressions.replace!(s, :| => :OR)
+    if s isa Expr && s.head == :call
+        Expressions.replace!(s, :~ => :NOT)
+        Expressions.replace!(s, :& => :AND)
+        Expressions.replace!(s, :| => :OR)
+    end
     graph = tree ? TreeView.walk_tree(s) : TreeView.make_dag(s)
     tikz = TreeView.tikz_representation(graph)
     if endswith(path, "svg")
@@ -519,7 +590,7 @@ function save_diagram(e::Expr, path; tree=true)
 end
 
 
-function diagram(e::Expr; tree=true, format="svg")
+function diagram(e::Expr; tree=true, format=:svg)
     tmp = read(`mktemp /tmp/XXXXX.$(format)`, String) |> strip
     Base.rm(tmp) # to suppress warnings
     save_diagram(e, tmp, tree=tree)
@@ -528,6 +599,22 @@ function diagram(e::Expr; tree=true, format="svg")
     return dia
 end
 
+
+function diagram(sym::Symbol; tree=true, format=:svg)
+    diagram(Expr(sym), tree=tree, format=format)
+end
+
+
+function diagram(val; tree=true, format=:svg)
+    diagram(Expr(Symbol(val)), tree=tree, format=format)
+end
+
+
+function to_constraints(e::Expr, model)
+    @assert e.head == :(=) "This method expects assignment expressions."
+    # TODO might be a fun exercise to translate assignment instructions
+    # to order-theoretic JuMP constraints. But not the thing i need to do now.
+end
 
 function expression_graph(e::Expr)
 

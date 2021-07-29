@@ -143,14 +143,22 @@ function launch(config_path)
               :WORKERS => WORKERS,
               :callback => Dashboard.ui_callback,
               ]
+    started_at = now()
     world, logger = Cosmos.run(;params...)
+    finished_at = now()
+    @info "Time spent in main GP loop, including initialization: $(finished_at - started_at)"
     #Distributed.rmprocs(WORKERS...)
+    if CORES > 1
+        try
+            Distributed.rmprocs(WORKERS...)
+        catch er
+            @warn "Failed to remove worker processes: $(er)"
+        end
+    end
     elites = [w.elites[1] for w in world]
     champion = sort(elites, by=objective_performance)[end]
     push!(logger.specimens, champion)
-    #@info "Preparing summary of champion $(champion.name) and simplifying expression..."
-    #champion_md = Analysis.summarize(logger, champion, decompile=true, label="champion")
-    #@info "Saved report to file://$(champion_md)"
+    @info "Sending data on champion to dashboard" Dashboard.check_server(config)
     Dashboard.ui_callback(logger, final=true) #, champion_md)
     wait(server_task)
     return (world=world, logger=logger, champion=champion)

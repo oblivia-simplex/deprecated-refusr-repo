@@ -6,20 +6,25 @@ module Dashboard
 using Dash
 using DashCoreComponents
 using Images
+using FileIO
 using ImageIO
 using DashHtmlComponents
 using DataFrames
 using ..LinearGenotype
 using ..Expressions
 using Base64
+using PlotlyBase
+using Plotly
+
 
 export ui_callback
 
 ASSET_DIR = "$(@__DIR__)/../assets"
-UI = dash(assets_folder=ASSET_DIR)
+UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=false)
 
 
-function initialize_server(config) # initialize UI
+
+function initialize_server(config; debug=true) # initialize UI
     global UI
     UI.layout = html_div() do
         html_h1("REFUSR UI"),
@@ -29,9 +34,16 @@ function initialize_server(config) # initialize UI
     enable_dev_tools!(UI, dev_tools_hot_reload=false)
     Dash.set_title!(UI, "REFUSR UI")
     @info "Starting Dash server..."
-    run_server(UI, config.dashboard.server, config.dashboard.port, debug=true)
+    run_server(UI, config.dashboard.server, config.dashboard.port; debug)
     @warn "Dash server no longer running"
 end
+
+
+## TODO: Decompile and plot AST, etc. on demand, not automatically.
+## The user should have to click something to trigger the decompilation, etc.
+## And _all_ the elites from all the islands should be made available for this.
+## the user can page through them, decompile them at will, inspect them, and so on.
+## This will make up the interactive aspect of the app, _and_ reduce unnecessary overhead
 
 
 function check_server(config)
@@ -51,10 +63,15 @@ function check_server(config)
 end
 
 
+
+
+## Example:
+# p1 = Plot(iris, x=:SepalLength, y=:SepalWidth, mode="markers", marker_size=8, group=:Species)
+
 function plot_stat(D::DataFrame;
-                   cols::Vector{Symbol},
+                   cols::Vector,
                    names=nothing,
-                   id="REFUSR-plot",
+                   id="stats-plot",
                    title="REFUSR Plot")
     X = D.iteration_mean
     if names === nothing
@@ -71,39 +88,50 @@ function plot_stat(D::DataFrame;
 end
 
 
-function generate_table(D::DataFrame, max_rows = 10)
+function generate_table(D::DataFrame, max_rows = 10; id = "stats")
     range = if nrow(D) <= max_rows
         (1:nrow(D))
     else
         [Int(ceil(n)) for n in LinRange(1, nrow(D), max_rows)]
     end
-    html_table([
-        html_thead(html_tr([html_th(col) for col in names(D)])),
-        html_tbody([
-            html_tr([html_td(D[r, c]) for c in names(D)]) for r in range
-        ]),
-    ])
+    html_div(style = Dict(
+        "border" => "2px solid #aaa",
+        "overflow-x" => "scroll",
+        "overflow-y" => "hidden",
+        "width" => "100%",
+    )) do
+        html_h2("Time Series Statistics"),
+        html_table(id="stats-table",
+                   style = Dict(
+                       "padding" => "5px",
+                       "border-spacing" => "15px",
+                       "border" => "0px",
+                   ),
+                   [html_thead(html_tr([html_th(col) for col in names(D)])),
+                    html_tbody([
+                        html_tr([html_td(round(D[r, c], digits=4)) for c in names(D)])
+                        for r in range
+                    ])])
+    end
 end
 
 
-function specimen_summary(g, title)
-    #@show g
-    dcc_markdown("""
-# $(title)
+function specimen_summary(g, title; id = "specimen-summary")
+    dcc_markdown(id=id,
+                 """
+    - Name: $(g.name)
+    - Generation: $(g.generation)
+    - Parents: $(isnothing(g.parents) ? "none" : join(g.parents, ", "))
+    - Number of Offspring: $(g.num_offspring)
+    - Phenotypic Resemblance to Parents: $(isnothing(g.likeness) ? "N/A" : join(string.(g.likeness), ", "))
+    - Fitness Scores: $(join(string.(g.fitness), ", "))
+    - **Performance: $(g.performance)**
 
-- Name: $(g.name)
-- Generation: $(g.generation)
-- Parents: $(isnothing(g.parents) ? "none" : join(g.parents, ", "))
-- Number of Offspring: $(g.num_offspring)
-- Phenotypic Resemblance to Parents: $(isnothing(g.likeness) ? "N/A" : join(string.(g.likeness), ", "))
-- Fitness Scores: $(join(string.(g.fitness), ", "))
-- **Performance: $(g.performance)**
-
-""")
+    """)
 end
 
 
-function disassembly(g)
+function disassembly(g; id="disassembly")
 
     chromosome_disas = join(string.(g.chromosome), "\n") * "\n"
     effective_disas = join(string.(g.effective_code), "\n") * "\n"
@@ -111,7 +139,9 @@ function disassembly(g)
     len_c = length(g.chromosome)
     len_e = length(g.effective_code)
 
-    dcc_markdown("""
+    dcc_markdown(
+        id = id,
+"""
 ## Chromosome
 
 $(len_c) Instructions
@@ -130,64 +160,122 @@ $(effective_disas)
 """)
 end
 
-SVG_TAG = "data:image/svg+xml;utf8,"
 
 function encode_svg(svg)
     "data:image/svg+xml;base64,$(base64encode(svg))"
 end
 
+
+function encode_png(png)
+    "data:image/png;base64,$(base64encode(png))"
+end
+
+
 function decompilation(L, g)
     symbolic = LinearGenotype.decompile(g)
-    #img_dir = "$(L.log_dir)/img/"
-    #mkpath(img_dir)
-    #syntax_tree_path = "$(img_dir)/$(g.name)_ast.png"
-    #syntax_graph_path = "$(img_dir)/$(g.name)_dag.png"
-    #Expressions.save_diagram(symbolic, syntax_tree_path, tree=true)
-    #Expressions.save_diagram(symbolic, syntax_graph_path, tree=false)
-    #syntax_tree_asset = "/assets/img/$(g.name)_ast.png"
-    #syntax_graph_asset = "/assets/img/$(g.name)_dag.png"
-    # TODO: figure out how to get SVG images to work
-    #cp(syntax_tree_path, "$(@__DIR__)/../" * syntax_tree_asset, force=true)
-    #cp(syntax_graph_path, "$(@__DIR__)/../" * syntax_graph_asset, force=true)
-    syntax_tree = Expressions.diagram(symbolic, format=:svg, tree=true)
-    syntax_graph = Expressions.diagram(symbolic, format=:svg, tree=false)
-    syntax_tree_url = encode_svg(syntax_tree)
-    syntax_graph_url = encode_svg(syntax_graph)
+    diagrams = if symbolic isa Expr
+        syntax_tree = Expressions.diagram(symbolic, format=:svg, tree=true)
+        syntax_graph = Expressions.diagram(symbolic, format=:svg, tree=false)
+        syntax_tree_url = encode_svg(syntax_tree)
+        syntax_graph_url = encode_svg(syntax_graph)
+        html_div() do
+            html_h3("Expression Diagrams"),
+            html_img(id="syntax-tree",
+                     src=syntax_tree_url,
+                     title="Syntax Tree"),
+            html_img(id="syntax-graph",
+                     src=syntax_graph_url,
+                     title="Syntax Graph")
+        end
+    else
+        html_div()
+    end
 
-    symbolic_expr = dcc_markdown("""```$(symbolic)```""")
-    html_div() do
-        dcc_markdown("""
-    ## Decompilation
-
-    ```{.lisp}
-    $(symbolic)
-    ```
-    """),
-        html_img(src=syntax_tree_url,
-                 title="Syntax Tree"),
-        html_img(src=syntax_graph_url,
-                 title="Syntax Graph")
+    html_div(id="decompilation") do
+        html_h2("Decompiled to Symbolic Expression"),
+        html_hr(),
+        html_pre("\n$(symbolic)\n", style = Dict("textAlign" => "center")),
+        html_hr(),
+        diagrams
     end
 end
 
 
-function interaction_matrix_image(L)
-    ims = L.im_log[end]
+function interaction_matrix_image(L, n=length(L.im_log))
+    ims = L.im_log[n]
     imgs = [colorant"white" .* im for im in ims]
     mos = mosaic(imgs..., fillvalue=colorant"red", ncol=(length(imgs)÷2), npad=1)
-    dir = UI.config.assets_folder * "/img/tmp/"
-    filename = "$(L.name).$(nrow(L.table)).png"
-    save("$(dir)/$(filename)", mos)
-    url = "/assets/img/tmp/$(filename)"
-    html_img(src=url, title="Interaction Matrices", height="100%")
+
+    io = IOBuffer()
+    save(Stream(format"PNG", io), mos)
+    data = take!(io)
+    url = encode_png(data)
+end
+
+
+function interaction_matrix_viewer(L, n=length(L.im_log); id="interaction-matrices")
+
+    url = interaction_matrix_image(L, n)
+    image = html_img(id="$(id)-image", src=url, title="Interaction Matrices", width="100%")
+    #marks = Dict([Symbol(v) => Symbol(L.table.iteration_mean[v] |> ceil)
+    #              for v in Int.(ceil.(LinRange(1, length(L.im_log), 100)))])
+    html_div(id=id) do
+        html_h1("Interaction Matrices"),
+        image,
+        dcc_slider(id="interaction-matrices-slider",
+                   min = 1,
+                   max = length(L.im_log),
+                   value = length(L.im_log),
+                   persistence = true,
+                   updatemode = "mouseup",
+                   )
+    end
 end
 
 # TODO see Plotly heatmaps
 
+# I really wish there was a better way of doing this than mucking around
+# with global state, but that seems to be the only way forward for now
+# at least it's just in the gui
+
+
+function specimen_selector(L; id="specimen-slider")
+    dcc_slider(id  = id,
+               min = 1,
+               max = length(L.specimens),
+               marks = Dict([Symbol(v) => Symbol(v) for v in 1:length(L.specimens)]),
+               value = length(L.specimens),
+               step = nothing,
+               persistence = true,
+               updatemode = "mouseup",
+               )
+end
+
+function specimen_report(L, idx=length(L.specimens); id="specimen-report")
+    g = L.specimens[idx]
+    title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
+    specimen_report = html_div(id=id) do
+        html_h1(title),
+        specimen_selector(L, id="specimen-slider"),
+        specimen_summary(g, title, id="specimen-summary"),
+        disassembly(g, id="specimen-disassembly"),
+        html_button(id="decompile-button", children="DECOMPILE", n_clicks = 0),
+        html_div(id = "specimen-decompilation", children=[])
+    end
+end
+
+LOGGER = nothing
+
+# TODO consider refactoring. You don't actually need to rebuild the layout
+# on every refresh. instead, just update the global LOGGER variable.
+# initialize the layout early on, and then just update the elements. See if
+# you can trigger an element refresh from julia.
 
 function ui_callback(L; final=false)::Nothing
-    global UI
-    @async begin # TODO restore async macro
+    global UI, LOGGER
+    @show LOGGER === L
+    LOGGER = L
+    begin # TODO restore async macro
         #@assert check_server(L.config) "Server is down"
 
         content = []
@@ -195,35 +283,106 @@ function ui_callback(L; final=false)::Nothing
         push!(content, html_h1("REFUSR UI",
                                style = Dict("textAlign" => "center")))
 
-
         # Let's add some graphs
-        p = plot_stat(L.table,
+        plot_container = html_div(id="plot-container") do
+            # TODO: a dictionary prettyfying the names of the columns
+            plot_stat(L.table,
                       cols=[:objective_meanfinite, :objective_maximum],
                       names=["mean performance", "best performance"],
-                      title="Performance",
-                      id="REFUSR-performance-plot")
+                      title="Time Series Plot")
+                      
+        end
 
-        push!(content, p)
+        push!(content, plot_container)
 
-        push!(content, generate_table(L.table, 10))
+        stats_dropdown = dcc_dropdown(
+            id= "stats-dropdown",
+            options = [(label = col, value = Symbol(col))
+                       for col in filter(x->x!="iteration_mean", names(L.table))],
+            value = [:objective_meanfinite, :objective_maximum],
+            multi = true,
+        )
 
-        push!(content, interaction_matrix_image(L))
+        push!(content, stats_dropdown)
+
+        push!(content, generate_table(L.table, 10, id="stats-table"))
+
+        push!(content, interaction_matrix_viewer(L, id="interaction-matrices"))
 
         # A specimen report
-        g = L.specimens[end]
-        title = final ? "Champion $(g.name)" : "Specimen $(g.name)"
-        push!(content, specimen_summary(g, title))
-        push!(content, disassembly(g))
+        report = if !isempty(L.specimens)
+            specimen_report(L)
+        else
+            html_div(id="specimen-report", "placeholder")
+        end
 
-        # Decompilation is expensive, so let's save it for the final product
-        #if final
-            @time push!(content, decompilation(L, g))
-        #end
+        specimen_report_container = html_div(id="specimen-report-container") do
+            report
+        end
 
-        UI.layout = html_div(children=content)
+        push!(content, specimen_report_container)
+
+        UI.layout = html_div(id="main", children=content)
+
     end # end async block
     return nothing
 end
 
+###
+# Dash Callbacks
+###
 
-end # end module
+callback!(
+    UI,
+    Output("interaction-matrices-image", "src"),
+    Input("interaction-matrices-slider", "value"),
+) do im_slice
+    global LOGGER
+    return interaction_matrix_image(LOGGER, im_slice)
+end
+
+
+callback!(
+    UI,
+    Output("specimen-report-container", "children"),
+    Input("specimen-slider", "value"),
+) do specimen_index
+    specimen_report(LOGGER, specimen_index)
+end
+
+callback!(
+    UI,
+    Output("specimen-decompilation", "children"),
+    Input("decompile-button", "n_clicks"),
+    State("specimen-slider", "value")
+) do clicks, specimen_index
+    global LOGGER
+    if clicks == 0
+        @debug clicks
+        return
+    end
+    if specimen_index > length(LOGGER.specimens) || specimen_index <= 0
+        @warn "Bad specimen_index, setting to last"
+        specimen_index = length(LOGGER.specimens)
+    end
+    @info "Decompiling specimen $(LOGGER.specimens[specimen_index].name)..." specimen_index clicks
+    return decompilation(LOGGER, LOGGER.specimens[specimen_index])
+end
+
+callback!(
+    UI,
+    Output("plot-container", "children"),
+    Input("stats-dropdown", "value"),
+) do cols
+    @show cols
+    plot_stat(LOGGER.table,
+              cols=cols,
+              title="Time Series Plot")
+end
+
+## Consider:
+# Things might run more smoothly if we stream data to disk, and then use callbacks
+# in the UI to dynamically read and render that data.
+##
+
+end # End module
