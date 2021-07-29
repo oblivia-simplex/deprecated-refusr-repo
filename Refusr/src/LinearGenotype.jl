@@ -1,6 +1,7 @@
 module LinearGenotype
 
 using Printf
+using Distributed
 import JSON
 import Base.isequal
 
