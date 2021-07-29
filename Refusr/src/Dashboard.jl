@@ -404,7 +404,7 @@ callback!(
     State("stats-dropdown", "value")
 ) do clicks, cols
     (generate_table(LOGGER.table, 10),
-     plot_stat(LOGGER.table, cols=cols, title="Time Series Plot")
+     plot_stat(LOGGER.table, cols=cols, title="Time Series Plot"))
 end
 
 
