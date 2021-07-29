@@ -218,12 +218,22 @@ function Creature(config::NamedTuple)
 end
 
 
+# For deserializing
 function Creature(d::Dict)
+
+    phenotype = if !(isnothing(d["phenotype"]))
+        ph = d["phenotype"]
+        results = ph["results"] |> BitArray
+        trace = cat([cat(a..., dims=2) for a in ph["trace"]]..., dims=3) |> BitArray
+        (;results, trace)
+    else
+        nothing
+    end
 
     Creature(
         chromosome = Inst.(d["chromosome"]),
         effective_code = isnothing(d["effective_code"]) ? nothing : Inst.(d["effective_code"]),
-        phenotype = isnothing(d["phenotype"]) ? nothing : (results = Vector{Bool}(d["phenotype"]["results"]), trace = BitArray(d["phenotype"]["trace"])),
+        phenotype = phenotype,
         fitness = Vector{Float64}([isnothing(x) ? -Inf : x for x in d["fitness"]]),
         name = d["name"],
         generation = d["generation"],
@@ -234,6 +244,9 @@ function Creature(d::Dict)
     )
 
 end
+
+
+Creature(s::String) = Creature(JSON.parse(s))
 
 
 function serialize_creature(g::Creature)

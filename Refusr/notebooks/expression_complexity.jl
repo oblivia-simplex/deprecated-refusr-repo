@@ -36,6 +36,12 @@ using Cockatrice
 # ╔═╡ 8f8b27a1-905d-4c83-80d7-8e6abb142790
 using ProgressMeter
 
+# ╔═╡ 57a51d4d-0cce-440c-ad4d-a2a4cacfec88
+using JSON
+
+# ╔═╡ 8feb92bd-9283-41b5-a415-8b52114fade4
+using StatsBase
+
 # ╔═╡ a51005b4-efc7-11eb-30ab-eb893d783c0e
 md"# Experiments in Expression Complexity and Simplification"
 
@@ -175,6 +181,8 @@ function process_complexity_data(data)
 			naive_depth_median = median(d.naive_depth),
 			naive_sub_max = maximum(d.naive_sub),
 			naive_depth_max = maximum(d.naive_depth),
+			naive_sub_std = std(d.naive_sub),
+			naive_depth_std = std(d.naive_depth),
 		
 			simple_sub_mean = mean(d.simple_sub),
 			simple_depth_mean = mean(d.simple_depth),
@@ -182,6 +190,8 @@ function process_complexity_data(data)
 			simple_depth_median = median(d.simple_depth),
 			simple_sub_max = maximum(d.simple_sub),
 			simple_depth_max = maximum(d.simple_depth),
+			simple_sub_std = std(d.simple_sub),
+			simple_depth_std = std(d.simple_depth),
 		) for d in data
 	] |> DataFrame
 end
@@ -189,33 +199,20 @@ end
 # ╔═╡ 4e51bcc8-baed-4824-bf99-dd8c5ca49f55
 
 
-# ╔═╡ b0e48ee2-14a8-4a6b-ab5a-384e967cf068
-C100 = trace_complexities(evoL, 100)
-
-# ╔═╡ 933d59b8-0182-45e9-92cb-b9185243ed90
-C100df = process_complexity_data(C100)
-
 # ╔═╡ 9b48b200-7444-404a-bb05-04f20ffa65c2
 
 
-# ╔═╡ d11d9526-a52e-4dde-bfbd-25eea4498507
-C500 = trace_complexities(evoL, 500)
-
-# ╔═╡ efe768a4-b30e-49b6-944f-789ad94db0ac
-C500df = process_complexity_data(C500)
-
-# ╔═╡ 114463d2-f6cf-42ba-bce2-7bb1b8c9ecd1
-C1000 = trace_complexities(evoL, 1000)
-
-# ╔═╡ 76fb464d-bf91-4cee-82a0-e83e6623b8cb
-C1000df = process_complexity_data(C1000)
-
 # ╔═╡ fb1e273e-9f16-4309-a8af-771b83782502
-function complexity_plot(df)
-	@df df plot(1:nrow(df),
-	[:naive_sub_mean :naive_depth_mean :simple_sub_mean :simple_depth_mean], 
-	label = ["mean subexpression count (naive)" "mean depth (naive)" "mean subexpression count (simplified)" "mean depth (simplified)"],
-	ribbon = [:naive_sub_std :naive_depth_std :simple_sub_std :simple_depth_std],
+function complexity_plot(df, attr=:sub, reducer=:median)
+	cols = Symbol.(["naive_$(attr)_$(reducer)", "simple_$(attr)_$(reducer)"])
+	ribbons = Symbol.(["naive_$(attr)_std", "simple_$(attr)_std"])
+	expanded = Dict(:sub => "subexpression count", :depth => "tree depth")
+	labels = ["$(reducer) $(expanded[attr]) (naive)" "$(reducer) $(expanded[attr]) (simplified)"]
+	ribbons = (df[!, ribbons] |> Array |> eachcol |> collect)
+	plot(1:nrow(df),
+	(df[!, cols] |> eachcol |> collect), 
+	label = labels,
+	ribbon = ribbons,
 	errorstyle = :ribbon,
 	fillalpha = 0.2,
 	legend = :topleft,
@@ -223,20 +220,35 @@ function complexity_plot(df)
 	w=3)
 end
 
-# ╔═╡ 576b7b0f-cf5e-42cb-980b-547264c6706a
-fig1 = complexity_plot(C100df)
+# ╔═╡ 210a34a3-ca85-4ab0-9275-6c6468d19f1e
+C1000dict = read("./analytics/complexity_trace.json", String) |> JSON.parse
 
-# ╔═╡ dec49b3c-216c-469c-997c-84cb1396a961
-fig2 = complexity_plot(C500)
+# ╔═╡ 9219fd97-f798-49fc-a4c5-41f332e7f3f2
+keys(C1000dict[1])
 
-# ╔═╡ 3c23cc5e-3993-4ae3-81b1-a6f9442b1837
-fig3 = complexity_plot(C1000)
+# ╔═╡ 18b59bdb-cd27-4d5c-85c5-06e98c02b380
+D1 = [(tournament=i, 
+			naive_depth=vcat(C1000dict[i]["naive_depth"]...), 
+			naive_sub=vcat(C1000dict[i]["naive_sub"]...), 
+			simple_depth=vcat(C1000dict[i]["simple_depth"]...), 
+			simple_sub=vcat(C1000dict[i]["simple_sub"]...)) for i in eachindex(C1000dict)]
 
-# ╔═╡ e2bad96c-8fac-4c2f-b273-5cf2efdac7be
-fig4 = complexity_plot(C1000[1:500,:])
+# ╔═╡ cddd7bbc-4b59-4fbc-a0e6-4feca988d7fd
+D = vcat([[(tournament=c.tournament,
+			naive_depth=c.naive_depth[j],
+			naive_sub=c.naive_sub[j],
+			simple_depth=c.simple_depth[j],
+			simple_sub=c.simple_sub[j]) for j in 1:64]
+	for c in D1]...) |> DataFrame
 
-# ╔═╡ ea36cb6c-4f8f-4cbb-8c52-0f521bac74a8
-C1000
+# ╔═╡ c59ec03e-71a5-49d2-8347-9910736a85ac
+
+
+# ╔═╡ 7101aea0-3b2b-44da-bb92-61ed96696255
+vcat(C1000dict[1]["simple_depth"]...)
+
+# ╔═╡ 0944f9e7-f9e3-4d88-8679-ffd2b5039b59
+
 
 # ╔═╡ Cell order:
 # ╠═a51005b4-efc7-11eb-30ab-eb893d783c0e
@@ -268,16 +280,14 @@ C1000
 # ╠═13d59966-6e63-41c4-b751-fbf1c60e3260
 # ╠═2158af26-6d8c-4cf8-98ac-79351345e009
 # ╠═4e51bcc8-baed-4824-bf99-dd8c5ca49f55
-# ╠═b0e48ee2-14a8-4a6b-ab5a-384e967cf068
-# ╠═933d59b8-0182-45e9-92cb-b9185243ed90
 # ╠═9b48b200-7444-404a-bb05-04f20ffa65c2
-# ╠═d11d9526-a52e-4dde-bfbd-25eea4498507
-# ╠═efe768a4-b30e-49b6-944f-789ad94db0ac
-# ╠═114463d2-f6cf-42ba-bce2-7bb1b8c9ecd1
-# ╠═76fb464d-bf91-4cee-82a0-e83e6623b8cb
 # ╠═fb1e273e-9f16-4309-a8af-771b83782502
-# ╠═576b7b0f-cf5e-42cb-980b-547264c6706a
-# ╠═dec49b3c-216c-469c-997c-84cb1396a961
-# ╠═3c23cc5e-3993-4ae3-81b1-a6f9442b1837
-# ╠═e2bad96c-8fac-4c2f-b273-5cf2efdac7be
-# ╠═ea36cb6c-4f8f-4cbb-8c52-0f521bac74a8
+# ╠═57a51d4d-0cce-440c-ad4d-a2a4cacfec88
+# ╠═210a34a3-ca85-4ab0-9275-6c6468d19f1e
+# ╠═9219fd97-f798-49fc-a4c5-41f332e7f3f2
+# ╠═18b59bdb-cd27-4d5c-85c5-06e98c02b380
+# ╠═cddd7bbc-4b59-4fbc-a0e6-4feca988d7fd
+# ╠═8feb92bd-9283-41b5-a415-8b52114fade4
+# ╠═c59ec03e-71a5-49d2-8347-9910736a85ac
+# ╠═7101aea0-3b2b-44da-bb92-61ed96696255
+# ╠═0944f9e7-f9e3-4d88-8679-ffd2b5039b59

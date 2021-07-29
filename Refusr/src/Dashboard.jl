@@ -4,10 +4,12 @@ module Dashboard
 # - decouple the logging rate from the UI refresh rate. Easy to do.
 
 using Dash
+using Dates
 using DashDaq
 using DashCoreComponents
 using Images
 using FileIO
+using JSON
 using ImageIO
 using DashHtmlComponents
 using DataFrames
@@ -16,6 +18,8 @@ using ..Expressions
 using Base64
 using PlotlyBase
 using Plotly
+using Cockatrice.Logging: Logger
+using Serialization
 
 
 export ui_callback
@@ -27,18 +31,33 @@ UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=!REFUSR_DEBUG)
 
 
 
-function initialize_server(config; debug=REFUSR_DEBUG) # initialize UI
+function initialize_server(;server="0.0.0.0",
+                           port=9123,
+                           log_dir,
+                           update_interval=2,
+                           debug=REFUSR_DEBUG) # initialize UI
     global UI
     UI.layout = html_div() do
-        html_h1("REFUSR UI"),
-        html_div("Waiting for data...")
+        html_h1("REFUSR UI", style = Dict("textAlign" => "center")),
+        html_div(id="loginfo", style = Dict("display" => "None")) do
+            log_dir,
+            now() |> string
+        end,
+        dcc_interval(id="main-interval", interval=update_interval*1000),
+        daq_toggleswitch(id="pause-switch", value=false, label="PAUSE", vertical=true),
+        html_div(id="data-container", style = Dict("display" => "None")),
+        html_div(id="main", "Waiting for data...")
     end
-    
+ 
     enable_dev_tools!(UI, dev_tools_hot_reload=false)
     Dash.set_title!(UI, "REFUSR UI")
     @info "Starting Dash server..."
-    run_server(UI, config.dashboard.server, config.dashboard.port; debug)
+    run_server(UI, server, port; debug)
     @warn "Dash server no longer running"
+end
+
+
+function launcher_ui()
 end
 
 
@@ -177,7 +196,7 @@ function encode_png(png)
 end
 
 
-function decompilation(L, g)
+function decompilation(g)
     symbolic = LinearGenotype.decompile(g)
     diagrams = if symbolic isa Expr
         syntax_tree = Expressions.diagram(symbolic, format=:svg, tree=true)
@@ -212,10 +231,9 @@ function decompilation(L, g)
 end
 
 
-function interaction_matrix_image(L, n=length(L.im_log))
-    ims = L.im_log[n]
+function interaction_matrix_image(ims::Array)
     imgs = [colorant"white" .* im for im in ims]
-    mos = mosaic(imgs..., fillvalue=colorant"red", ncol=(length(imgs)÷2), npad=1)
+    mos = mosaicview(imgs..., fillvalue=colorant"red", ncol=(length(imgs)÷2), npad=1)
 
     io = IOBuffer()
     save(Stream(format"PNG", io), mos)
@@ -224,16 +242,19 @@ function interaction_matrix_image(L, n=length(L.im_log))
 end
 
 
+interaction_matrix_image(already_png_encoded::String) = already_png_encoded
+
+
 function interaction_matrix_viewer(L, n=length(L.im_log); id="interaction-matrices")
 
-    url = interaction_matrix_image(L, n)
+    url = interaction_matrix_image(L.im_log[n])
     image = html_img(id="$(id)-image", src=url, title="Interaction Matrices", width="100%")
     #marks = Dict([Symbol(v) => Symbol(L.table.iteration_mean[v] |> ceil)
     #              for v in Int.(ceil.(LinRange(1, length(L.im_log), 100)))])
     html_div(id=id) do
         html_h1("Interaction Matrices"),
         image,
-        dcc_slider(id="interaction-matrices-slider",
+        daq_slider(id="interaction-matrices-slider",
                    min = 1,
                    max = length(L.im_log),
                    value = length(L.im_log),
@@ -250,12 +271,12 @@ end
 # at least it's just in the gui
 
 
-function specimen_selector(L; id="specimen-slider")
-    dcc_slider(id  = id,
+function specimen_selector(len; id="specimen-slider")
+    daq_slider(id  = id,
                min = 1,
-               max = length(L.specimens),
-               marks = Dict([Symbol(v) => Symbol(v) for v in 1:length(L.specimens)]),
-               value = length(L.specimens),
+               max = len,
+               marks = Dict([Symbol(v) => Symbol(v) for v in 1:len]),
+               value = len,
                step = nothing,
                persistence = true,
                updatemode = "mouseup",
@@ -270,13 +291,13 @@ function decompile_button()
                 n_clicks = 0)
 end
 
-function specimen_report(L, idx=length(L.specimens); id="specimen-report")
-    g = L.specimens[idx]
+
+function specimen_report(g, len; id="specimen-report")
     title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
 
     specimen_report = html_div(id=id) do
         html_h1(title),
-        specimen_selector(L, id="specimen-slider"),
+        specimen_selector(len, id="specimen-slider"),
         specimen_summary(g, title, id="specimen-summary"),
         html_div(id = "specimen-decompilation") do
             decompile_button()
@@ -287,84 +308,154 @@ function specimen_report(L, idx=length(L.specimens); id="specimen-report")
 end
 
 LOGGER = nothing
+LAYOUT_INITIALIZED = false
 
 # TODO consider refactoring. You don't actually need to rebuild the layout
 # on every refresh. instead, just update the global LOGGER variable.
 # initialize the layout early on, and then just update the elements. See if
 # you can trigger an element refresh from julia.
 
-function ui_callback(L; final=false)::Nothing
-    global UI, LOGGER
-    @show LOGGER === L
-    LOGGER = L
-    begin # TODO restore async macro
-        #@assert check_server(L.config) "Server is down"
+function encode_table(table)
+    columns = names(table)
+    data = reinterpret(UInt8, Array{Float64}(table)) |> base64encode
+    (columns = columns, data = data) |> json
+end
 
-        content = []
+function decode_table(blob)
+    j = JSON.parse(blob)
+    columns = Symbol.(j["columns"])
+    raw = base64decode(j["data"])
+    vec = reinterpret(Float64, raw)
+    data = reshape(vec, (length(vec)÷length(columns), length(columns))) |> collect
+    DataFrame(data, columns)
+end
 
-        push!(content, html_h1("REFUSR UI",
-                               style = Dict("textAlign" => "center")))
 
-        # Let's add some graphs
-        plot_container = html_div(id="plot-container") do
-            # TODO: a dictionary prettyfying the names of the columns
-            plot_stat(L.table,
-                      cols=[:objective_meanfinite, :objective_maximum],
-                      names=["mean performance", "best performance"],
-                      title="Time Series Plot")
-                      
-        end
+function generate_main_page(L)
+    @debug "Entering generate_main_page with logger $(L.name)"
+    ##
+    # L just needs to be an object with the fields:
+    # - table
+    # - specimens
+    # - im_log
+    ##
+    #@assert check_server(L.config) "Server is down"
 
-        push!(content, plot_container)
+    content = []
 
-        stats_dropdown = dcc_dropdown(
-            id= "stats-dropdown",
-            options = [(label = col, value = Symbol(col))
-                       for col in filter(x->x!="iteration_mean", names(L.table))],
-            value = [:objective_meanfinite, :objective_maximum],
-            multi = true,
-        )
+    #push!(content, html_h1("REFUSR UI", style = Dict("textAlign" => "center")))
 
-        push!(content, stats_dropdown)
+    # Let's add some graphs
+    plot_container = html_div(id="plot-container") do
+        # TODO: a dictionary prettyfying the names of the columns
+        plot_stat(L.table,
+                  cols=[:objective_meanfinite, :objective_maximum],
+                  names=["mean performance", "best performance"],
+                  title="Time Series Plot")
+    end
 
-        table_container = html_div(id="table-container") do
-            generate_table(L.table, 10, id="stats-table")
-        end
-        push!(content, table_container)
-        push!(content, html_button(id="table-refresh", "PRESS TO REFRESH"))
+    push!(content, plot_container)
 
-        push!(content, interaction_matrix_viewer(L, id="interaction-matrices"))
+    stats_dropdown = dcc_dropdown(
+        id= "stats-dropdown",
+        options = [(label = col, value = Symbol(col))
+                   for col in filter(x->x!="iteration_mean", names(L.table))],
+        value = [:objective_meanfinite, :objective_maximum],
+        multi = true,
+    )
 
-        # A specimen report
-        report = if !isempty(L.specimens)
-            specimen_report(L)
-        else
-            html_div(id="specimen-report", "placeholder")
-        end
+    push!(content, stats_dropdown)
 
-        specimen_report_container = html_div(id="specimen-report-container") do
-            report
-        end
+    table_container = html_div(id="table-container") do
+        generate_table(L.table, 10, id="stats-table")
+    end
+    push!(content, table_container)
+    push!(content, html_button(id="table-refresh", "PRESS TO REFRESH"))
 
-        push!(content, specimen_report_container)
+    push!(content, interaction_matrix_viewer(L, id="interaction-matrices"))
 
-        UI.layout = html_div(id="main", children=content)
+    # A specimen report
+    report = if !isempty(L.specimens)
+        specimen_report(L.specimens[end], length(L.specimens))
+    else
+        html_div(id="specimen-report")
+    end
 
-    end # end async block
-    return nothing
+    specimen_report_container = html_div(id="specimen-report-container") do
+        report
+    end
+
+    push!(content, specimen_report_container)
+
+    config_txt = html_div(id="config-txt") do
+        html_hr(),
+        html_h1("Configuration for this Experiment"),
+        html_pre("$(L.config.yaml)"),
+        html_hr()
+    end
+
+    push!(content, config_txt)
+
+
+    html_div(id="main") do
+        content
+    end
+end
+
+
+function populate_data_container(L)
+    [
+        html_div(id="table-data-container") do
+        L.table |> encode_table
+        end,
+        html_div(id="specimen-data-container") do
+        json.(L.specimens)
+        end,
+        html_div(id="im-data-container") do
+        interaction_matrix_image.(L.im_log)
+        end,
+    ]
 end
 
 ###
 # Dash Callbacks
 ###
 
+##
+# Throws an exception if the serialized logger hasn't been modified
+# since mod_time. This is fine. Dash.jl will catch it, and it's a useful
+# way of preventing callbacks from executing if there's no new data.
+##
+function get_logger(log_dir, mod_time)
+    @debug "Deserializing logger from $(log_dir)/.L.dump"
+    path = "$(log_dir)/.L.dump"
+    new_mod_time = mtime(path) |> unix2datetime
+    old_mod_time = DateTime(mod_time)
+    if old_mod_time < new_mod_time
+        @debug "$(path) has changed, deserializing Logger" old_mod_time new_mod_time
+        (deserialize(path), new_mod_time)
+    else
+        error("Logger unchanged (benign)")
+    end
+end
+
+
+
+function with_logger(loginfo, method, args...)
+    log_dir, mod_time = loginfo
+    L, new_mod_time = get_logger(log_dir, mod_time)
+    (method(L, args...), [log_dir, new_mod_time])
+end
+
+
+
 callback!(
     UI,
     Output("interaction-matrices-image", "src"),
     Input("interaction-matrices-slider", "value"),
-) do im_slice
-    global LOGGER
-    return interaction_matrix_image(LOGGER, im_slice)
+    Input("im-data-container", "children"),
+) do im_idx, im_vec
+    interaction_matrix_image(im_vec[im_idx])
 end
 
 
@@ -372,8 +463,12 @@ callback!(
     UI,
     Output("specimen-report-container", "children"),
     Input("specimen-slider", "value"),
-) do specimen_index
-    specimen_report(LOGGER, specimen_index)
+    Input("specimen-data-container", "children"),
+) do specimen_index, specimen_vec
+    # Creature knows how to parse JSON
+    specimen = LinearGenotype.Creature(specimen_vec[specimen_index])
+    @debug "Generating report for specimen $(specimen.name)"
+    return specimen_report(specimen, length(specimen_vec))
 end
 
 callback!(
@@ -381,47 +476,53 @@ callback!(
     Output("specimen-decompilation", "children"),
     Output("decompile-button", "hidden"),
     Input("decompile-button", "n_clicks"),
-    State("specimen-slider", "value")
-) do clicks, specimen_index
-    global LOGGER
+    State("specimen-slider", "value"),
+    State("specimen-data-container", "children"),
+) do clicks, specimen_index, specimen_vec
     if clicks != 1
         return decompile_button(), false
     end
-    if specimen_index > length(LOGGER.specimens) || specimen_index <= 0
-        @warn "Bad specimen_index, setting to last"
-        specimen_index = length(LOGGER.specimens)
-    end
-    @info "Decompiling specimen $(LOGGER.specimens[specimen_index].name)..." specimen_index clicks
-    return decompilation(LOGGER, LOGGER.specimens[specimen_index]), true
+    specimen = LinearGenotype.Creature(specimen_vec[specimen_index])
+    @debug "Decompiling specimen $(specimen.name)..." specimen_index clicks
+    return decompilation(specimen), true
 end
+
 
 
 callback!(
     UI,
     Output("table-container", "children"),
-#    Output("plot-container", "children"),
-    Input("table-refresh", "n_clicks"),
-    State("stats-dropdown", "value")
-) do clicks, cols
-    generate_table(LOGGER.table, 10)
-    # plot_stat(LOGGER.table, cols=cols, title="Time Series Plot")
+    Output("plot-container", "children"),
+    Input("stats-dropdown", "value"),
+    Input("table-data-container", "children")
+) do plot_columns, blob
+    table = decode_table(blob)
+    (generate_table(table, 10),
+     plot_stat(table,
+               cols=plot_columns,
+               title="Time Series Plot"))
 end
 
 
 callback!(
     UI,
-    Output("plot-container", "children"),
-    Input("stats-dropdown", "value"),
-) do cols
-    @show cols
-    plot_stat(LOGGER.table,
-              cols=cols,
-              title="Time Series Plot")
+    Output("data-container", "children"),
+    Output("main", "children"),
+    Output("loginfo", "children"),
+    Input("main-interval", "n_intervals"),
+    Input("pause-switch", "value"),
+    State("loginfo", "children"),
+) do n_intervals, pause, loginfo
+    @assert !pause "Refreshing paused (benign)"
+    fn = L -> (populate_data_container(L), generate_main_page(L))
+    ((data_children, main_children), loginfo) = with_logger(loginfo, fn)
+    (data_children, main_children, loginfo)
 end
-
 ## Consider:
 # Things might run more smoothly if we stream data to disk, and then use callbacks
 # in the UI to dynamically read and render that data.
 ##
 
 end # End module
+
+# TODO visualize the execution trace and its information content in an interesting, colourful way

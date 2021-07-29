@@ -27,9 +27,15 @@ end
 
 function launch(config_path)
     config = prep_config(config_path)
-    server_task = @async Dashboard.initialize_server(config)
-    Dashboard.check_server(config)
+    logger = Cockatrice.Logging.Logger(LOGGERS, config)
 
+    server_task = @async Dashboard.initialize_server(
+        server=config.dashboard.server,
+        port=config.dashboard.port,
+        log_dir=logger.log_dir,
+    )
+
+    health_callback = _ -> (@assert Dashboard.check_server(config) "Server down")
     fitness_function = FF.fit #Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     #@assert fitness_function isa Function
 
@@ -45,7 +51,7 @@ function launch(config_path)
               :stopping_condition => stopping_condition,
               :objective_performance => objective_performance,
               :WORKERS => WORKERS,
-              :callback => Dashboard.ui_callback,
+              :callback => health_callback,
               ]
     started_at = now()
     world, logger = Cosmos.run(;params...)
@@ -63,7 +69,15 @@ function launch(config_path)
     champion = sort(elites, by=objective_performance)[end]
     push!(logger.specimens, champion)
     @info "Sending data on champion to dashboard" Dashboard.check_server(config)
-    Dashboard.ui_callback(logger, final=true) #, champion_md)
+    Dashboard.ui_callback(logger) #, champion_md)
+    # might as well decompile the specimens while we're waiting.
+    # @async begin
+    #     @info "Asynchronously decompiling specimens. Beware of race conditions..."
+    #     for i in eachindex(logger.specimens)
+    #         s = LinearGenotype.decompile(logger.specimens[i])
+    #         @info "[$(i)/$(length(logger.specimens))] Decompiled $(logger.specimens[i].name)" s
+    #     end
+    # end
     wait(server_task)
     return (world=world, logger=logger, champion=champion)
 end
