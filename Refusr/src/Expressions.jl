@@ -219,7 +219,7 @@ demangle_helper(s) = s
 simplify(b::Bool) = b
 simplify(s::Symbol) = s
 
-Cache() = LRU{Expr, Union{Bool, Expr, Symbol}}(maxsize=2^20, by=Base.summarysize)
+Cache() = LRU{Expr, Union{Bool, Expr, Symbol}}(maxsize=2^30, by=Base.summarysize)
 
 USE_CACHE = true
 
@@ -229,21 +229,20 @@ function _use_cache(b::Bool)
 end
 
 
-           
+ 
 
 const __simplify = let CACHE = Cache(),
     hits = 0,
     queries = 0,
     cache_time = 0
-function simplify_(expr::Expr)::Union{Bool, Expr, Symbol}
-    use_espresso = true
+function simplify_(e::Expr)::Union{Bool, Expr, Symbol}
 
-    function check_cache(expr)
+    function check_cache(e)
         if USE_CACHE
             start_at = now()
-            #queries > 0 && @info "Cache stats" hits queries (hits / queries) CACHE.currentsize (CACHE.currentsize / CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+            queries > 0 && @debug "Cache stats" hits queries (hits / queries) CACHE.currentsize (CACHE.currentsize / CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
             try
-                result = CACHE[expr]
+                result = CACHE[e]
                 hits += 1
                 cache_time += (now() - start_at).value
                 return result
@@ -255,31 +254,17 @@ function simplify_(expr::Expr)::Union{Bool, Expr, Symbol}
         end
     end
 
-    function cache(expr, result)
+    function cache(e, result)
         if USE_CACHE
             start_at = now()
-            CACHE[expr] = result
+            CACHE[e] = result
             cache_time += (now() - start_at).value
         end
     end
 
-    res = check_cache(expr)
-    !isnothing(res) && return res
-
-    # For a first pass, let's use Espresso, which seems to be easier on memory.
-    @debug "Simplifying expression with $(count_subexpressions(e)) subexpressions:\n$(e)"
-    e = if use_espresso 
-        @debug "Simplifying an expression of $(count_subexpressions(e)) subexpressions:\n$(e)\nwith Espresso..."
-        e = Espresso.simplify(expr)
-        @debug "Simplified to $(count_subexpressions(e)) subexpressions:\n$(e)\nSimplifying with sympy..."
-        e
-    else
-        expr
-    end
-
-    # Now let's check to see if the Espresso-reduced expression is in the cache
     res = check_cache(e)
     !isnothing(res) && return res
+
 
     Rn = variables_used_upper_bound(e, :R)
     Dn = variables_used_upper_bound(e, :D)
@@ -294,9 +279,9 @@ function simplify_(expr::Expr)::Union{Bool, Expr, Symbol}
     if simple isa Expr
         replace!(simple, :^ => :⊻)
     end
-    @debug "Simplified to:\n$(simple)\nwith $(count_subexpressions(simple))..."
-    cache(expr, simple)
- 
+    @debug "Simplified\n$(e)\nwith $(count_subexpressions(e)) subexpressions, to:\n$(simple)\nwith $(count_subexpressions(simple))..."
+    cache(e, simple)
+
     return simple
 end
 end # end closure

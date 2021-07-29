@@ -176,6 +176,7 @@ Base.@kwdef mutable struct Creature
     likeness = []
     performance = nothing
     symbolic = nothing
+    native_island = myid() == 1 ? 1 : myid() - 1
 end
 
 
