@@ -4,6 +4,7 @@ module Dashboard
 # - decouple the logging rate from the UI refresh rate. Easy to do.
 
 using Dash
+using DashDaq
 using DashCoreComponents
 using Images
 using FileIO
@@ -19,12 +20,14 @@ using Plotly
 
 export ui_callback
 
+REFUSR_DEBUG = "REFUSR_DEBUG" ∈ keys(ENV) ? parse(Bool, ENV["REFUSR_DEBUG"]) : false
+
 ASSET_DIR = "$(@__DIR__)/../assets"
-UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=false)
+UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=!REFUSR_DEBUG)
 
 
 
-function initialize_server(config; debug=true) # initialize UI
+function initialize_server(config; debug=REFUSR_DEBUG) # initialize UI
     global UI
     UI.layout = html_div() do
         html_h1("REFUSR UI"),
@@ -94,24 +97,26 @@ function generate_table(D::DataFrame, max_rows = 10; id = "stats")
     else
         [Int(ceil(n)) for n in LinRange(1, nrow(D), max_rows)]
     end
-    html_div(style = Dict(
-        "border" => "2px solid #aaa",
-        "overflow-x" => "scroll",
-        "overflow-y" => "hidden",
-        "width" => "100%",
-    )) do
+    html_div() do
         html_h2("Time Series Statistics"),
-        html_table(id="stats-table",
-                   style = Dict(
-                       "padding" => "5px",
-                       "border-spacing" => "15px",
-                       "border" => "0px",
-                   ),
-                   [html_thead(html_tr([html_th(col) for col in names(D)])),
-                    html_tbody([
-                        html_tr([html_td(round(D[r, c], digits=4)) for c in names(D)])
-                        for r in range
-                    ])])
+        html_div(style = Dict(
+            "border" => "2px solid #aaa",
+            "overflow-x" => "scroll",
+            "overflow-y" => "hidden",
+            "width" => "100%",
+        )) do
+            html_table(id="stats-table",
+                       style = Dict(
+                           "padding" => "3px",
+                           "border-spacing" => "15px",
+                           "border" => "0px",
+                       ),
+                       [html_thead(html_tr([html_th(col) for col in names(D)])),
+                        html_tbody([
+                            html_tr([html_td(round(D[r, c], digits=4)) for c in names(D)])
+                            for r in range
+                        ])])
+        end
     end
 end
 
@@ -120,6 +125,7 @@ function specimen_summary(g, title; id = "specimen-summary")
     dcc_markdown(id=id,
                  """
     - Name: $(g.name)
+    - Native Island: $(g.native_island)
     - Generation: $(g.generation)
     - Parents: $(isnothing(g.parents) ? "none" : join(g.parents, ", "))
     - Number of Offspring: $(g.num_offspring)
@@ -193,9 +199,14 @@ function decompilation(L, g)
 
     html_div(id="decompilation") do
         html_h2("Decompiled to Symbolic Expression"),
-        html_hr(),
-        html_pre("\n$(symbolic)\n", style = Dict("textAlign" => "center")),
-        html_hr(),
+        html_div(style = Dict(
+            "border" => "2px solid #aaa",
+            "overflow-x" => "scroll",
+            "overflow-y" => "hidden",
+            "width" => "100%",
+        )) do
+            html_pre("\n$(symbolic)\n", style = Dict("textAlign" => "center"))
+        end,
         diagrams
     end
 end
@@ -251,16 +262,27 @@ function specimen_selector(L; id="specimen-slider")
                )
 end
 
+
+function decompile_button()
+    html_button(id="decompile-button",
+                hidden=false,
+                children="PRESS TO DECOMPILE (AND WAIT)",
+                n_clicks = 0)
+end
+
 function specimen_report(L, idx=length(L.specimens); id="specimen-report")
     g = L.specimens[idx]
     title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
+
     specimen_report = html_div(id=id) do
         html_h1(title),
         specimen_selector(L, id="specimen-slider"),
         specimen_summary(g, title, id="specimen-summary"),
-        disassembly(g, id="specimen-disassembly"),
-        html_button(id="decompile-button", children="DECOMPILE", n_clicks = 0),
-        html_div(id = "specimen-decompilation", children=[])
+        html_div(id = "specimen-decompilation") do
+            decompile_button()
+        end,
+        html_hr(),
+        disassembly(g, id="specimen-disassembly")
     end
 end
 
@@ -305,7 +327,11 @@ function ui_callback(L; final=false)::Nothing
 
         push!(content, stats_dropdown)
 
-        push!(content, generate_table(L.table, 10, id="stats-table"))
+        table_container = html_div(id="table-container") do
+            generate_table(L.table, 10, id="stats-table")
+        end
+        push!(content, table_container)
+        push!(content, html_button(id="table-refresh", "PRESS TO REFRESH"))
 
         push!(content, interaction_matrix_viewer(L, id="interaction-matrices"))
 
@@ -353,21 +379,34 @@ end
 callback!(
     UI,
     Output("specimen-decompilation", "children"),
+    Output("decompile-button", "hidden"),
     Input("decompile-button", "n_clicks"),
     State("specimen-slider", "value")
 ) do clicks, specimen_index
     global LOGGER
-    if clicks == 0
-        @debug clicks
-        return
+    if clicks != 1
+        return decompile_button(), false
     end
     if specimen_index > length(LOGGER.specimens) || specimen_index <= 0
         @warn "Bad specimen_index, setting to last"
         specimen_index = length(LOGGER.specimens)
     end
     @info "Decompiling specimen $(LOGGER.specimens[specimen_index].name)..." specimen_index clicks
-    return decompilation(LOGGER, LOGGER.specimens[specimen_index])
+    return decompilation(LOGGER, LOGGER.specimens[specimen_index]), true
 end
+
+
+callback!(
+    UI,
+    Output("table-container", "children"),
+    Output("plot-container", "children"),
+    Input("table-refresh", "n_clicks"),
+    State("stats-dropdown", "value")
+) do clicks, cols
+    (generate_table(LOGGER.table, 10),
+     plot_stat(LOGGER.table, cols=cols, title="Time Series Plot")
+end
+
 
 callback!(
     UI,
