@@ -221,6 +221,8 @@ simplify(s::Symbol) = s
 
 Cache() = LRU{Expr, Union{Bool, Expr, Symbol}}(maxsize=2^30, by=Base.summarysize)
 
+DiagramCache() = LRU{Tuple{Expr, Bool, Symbol}, Union{String, Vector{UInt8}}}(maxsize=2^30, by=Base.summarysize)
+
 USE_CACHE = true
 
 function _use_cache(b::Bool)
@@ -575,7 +577,7 @@ function save_diagram(e::Expr, path; tree=true)
 end
 
 
-function diagram(e::Expr; tree=true, format=:svg)
+@memoize DiagramCache function diagram(e::Expr; tree=true, format=:svg)
     tmp = read(`mktemp /tmp/XXXXX.$(format)`, String) |> strip
     Base.rm(tmp) # to suppress warnings
     save_diagram(e, tmp, tree=tree)
