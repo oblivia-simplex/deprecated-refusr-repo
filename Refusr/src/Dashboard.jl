@@ -1,10 +1,10 @@
 module Dashboard
 
-# TODO:
-# - decouple the logging rate from the UI refresh rate. Easy to do.
-
+using Distributed
 using Dash
 using Dates
+using Memoize
+using LRUCache
 using DashDaq
 using DashCoreComponents
 using Images
@@ -22,7 +22,6 @@ using Cockatrice.Logging: Logger
 using Serialization
 
 
-export ui_callback
 
 REFUSR_DEBUG = "REFUSR_DEBUG" ∈ keys(ENV) ? parse(Bool, ENV["REFUSR_DEBUG"]) : false
 
@@ -31,29 +30,31 @@ UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=!REFUSR_DEBUG)
 
 
 
-function initialize_server(;server="0.0.0.0",
-                           port=9123,
-                           log_dir,
+function initialize_server(;config,
                            update_interval=2,
-                           debug=REFUSR_DEBUG) # initialize UI
+                           debug=REFUSR_DEBUG,
+                           background=true) 
     global UI
     UI.layout = html_div() do
         html_h1("REFUSR UI", style = Dict("textAlign" => "center")),
         html_div(id="loginfo", style = Dict("display" => "None")) do
-            log_dir,
+            config.logging.dir,
             now() |> string
         end,
         dcc_interval(id="main-interval", interval=update_interval*1000),
-        daq_toggleswitch(id="pause-switch", value=false, label="PAUSE", vertical=true),
+        daq_toggleswitch(id="pause-switch", value=false, label="PAUSE", vertical=false),
         html_div(id="data-container", style = Dict("display" => "None")),
-        html_div(id="main", "Waiting for data...")
+        generate_main_page(config)
     end
  
     enable_dev_tools!(UI, dev_tools_hot_reload=false)
     Dash.set_title!(UI, "REFUSR UI")
     @info "Starting Dash server..."
-    run_server(UI, server, port; debug)
-    @warn "Dash server no longer running"
+    if background
+        return @async run_server(UI, config.dashboard.server, config.dashboard.port; debug)
+    else
+        return run_server(UI, config.dashboard.server, config.dashboard.port; debug)
+    end
 end
 
 
@@ -90,15 +91,36 @@ end
 ## Example:
 # p1 = Plot(iris, x=:SepalLength, y=:SepalWidth, mode="markers", marker_size=8, group=:Species)
 
+function fix_name(col)
+    subs = [
+        "_" => " ",
+        "fitness 1" => "relative ingenuity",
+        "fitness 2" => "trace information",
+        "fitness 3" => "parsimony",
+        "likeness" => "family resemblance",
+        "meanfinite" => "mean",
+        "std" => "(standard deviation)",
+        "len" => "length",
+        "num" => "number of",
+    ]
+    str = string(col)
+    for p in subs
+        str = replace(str, p)
+    end
+    parts = split(str)
+    if parts[end] ∈ ["mean", "maximum"]
+        return "$(parts[end]) $(join(parts[1:(end-1)], " "))"
+    else
+        return str
+    end
+end
+
 function plot_stat(D::DataFrame;
                    cols::Vector,
-                   names=nothing,
                    id="stats-plot",
                    title="REFUSR Plot")
     X = D.iteration_mean
-    if names === nothing
-        names = [replace(n, "_" => " ") for n in string.(cols)]
-    end
+    names = fix_name.(cols)
     data = [(x = X, y = D[!,Y], name = N) for (Y,N) in zip(cols, names)]
     dcc_graph(
         id = id,
@@ -196,13 +218,12 @@ function encode_png(png)
 end
 
 
-function decompilation(g)
-    symbolic = LinearGenotype.decompile(g)
-    diagrams = if symbolic isa Expr
-        syntax_tree = Expressions.diagram(symbolic, format=:svg, tree=true)
-        syntax_graph = Expressions.diagram(symbolic, format=:svg, tree=false)
-        syntax_tree_url = encode_svg(syntax_tree)
-        syntax_graph_url = encode_svg(syntax_graph)
+function decompilation(cached::Dict)
+    symbolic = cached["symbolic"]
+    syntax_tree_url = cached["tree"]
+    syntax_graph_url = cached["graph"]
+
+    diagrams = if !isempty(syntax_tree_url)
         html_div() do
             html_h3("Expression Diagrams"),
             html_img(id="syntax-tree",
@@ -216,7 +237,7 @@ function decompilation(g)
         html_div()
     end
 
-    html_div(id="decompilation") do
+    return html_div(id="decompilation") do
         html_h2("Decompiled to Symbolic Expression"),
         html_div(style = Dict(
             "border" => "2px solid #aaa",
@@ -228,8 +249,27 @@ function decompilation(g)
         end,
         diagrams
     end
+
 end
 
+function decompilation_helper(g::LinearGenotype.Creature)::Dict
+    symbolic = LinearGenotype.decompile(g)
+    tree, graph = if symbolic isa Expr
+        tr = Expressions.diagram(symbolic, format=:svg, tree=true) |> encode_svg
+        gr = Expressions.diagram(symbolic, format=:svg, tree=false) |> encode_svg
+        (tr, gr)
+    else
+        ("", "")
+    end
+
+    Dict("name" => g.name,
+         "symbolic" => string(symbolic),
+         "tree" => tree,
+         "graph" => graph)
+end
+
+
+decompilation(g::LinearGenotype.Creature) = decompilation_helper(g) |> decompilation
 
 function interaction_matrix_image(ims::Array)
     imgs = [colorant"white" .* im for im in ims]
@@ -238,29 +278,67 @@ function interaction_matrix_image(ims::Array)
     io = IOBuffer()
     save(Stream(format"PNG", io), mos)
     data = take!(io)
-    url = encode_png(data)
+    encode_png(data)
 end
 
 
 interaction_matrix_image(already_png_encoded::String) = already_png_encoded
 
 
-function interaction_matrix_viewer(L, n=length(L.im_log); id="interaction-matrices")
+function interaction_matrix_viewer(n; id="interaction-matrices")
 
-    url = interaction_matrix_image(L.im_log[n])
-    image = html_img(id="$(id)-image", src=url, title="Interaction Matrices", width="100%")
+    url = ""
+
+    #if 1 <= n <= length(L.im_log)
+    #    interaction_matrix_image(L.im_log[n])
+    #else
+    #    ""
+    #end
+
+    image = html_img(id="interaction-matrices-image",
+                     src=url,
+                     title="Interaction Matrices",
+                     width="100%")
     #marks = Dict([Symbol(v) => Symbol(L.table.iteration_mean[v] |> ceil)
     #              for v in Int.(ceil.(LinRange(1, length(L.im_log), 100)))])
     html_div(id=id) do
         html_h1("Interaction Matrices"),
         image,
-        daq_slider(id="interaction-matrices-slider",
+        dcc_slider(id="interaction-matrices-slider",
                    min = 1,
-                   max = length(L.im_log),
-                   value = length(L.im_log),
+                   max = n,
+                   marks = [Dict(Symbol(1) => Symbol(1))],
+                   value = n,
                    persistence = true,
+                   persistence_type = "session",
                    updatemode = "mouseup",
-                   )
+                   ),
+        dcc_markdown(id="interaction-matrix-explanation",
+"""
+### Explanation
+
+Interaction matrices are a data structure used to calculate the relative selective
+pressures of each test case -- which, in this context, means a set of inputs for a
+Boolean function, or the input row of its truth table. Each test case is assigned a
+_difficulty_ score, equal to 1 minus the frequency with which its solution appears in the
+existing population (i.e., `(~).(row .⊻ answer_vector) |> mean`, in Julia). An
+individual is then assigned a score equal to the sum of difficulties of the cases
+they solved correctly, divided by the total number of cases. This is the source of
+the value `fitness 1` in the fitness vector.
+
+Each subpopulation, or "island", maintains its own interaction
+matrix. In the visualizations above, each row represents a test case (a set of
+inputs for a Boolean function), and each column represents an individual in the
+subpopulation. Test cases are sorted by
+[Gray code](https://en.wikipedia.org/wiki/Gray_code), to preserve locality on the
+Boolean hypercube (two adjacent test cases differ by exactly one bit flip), and
+individuals are sorted according to [Hilbert curve](https://en.wikipedia.org/wiki/Hilbert_curve)
+through the 2-dimensional island population, to preserve geographical locality.
+
+This provides us with a succinct impression of the phenotypic diversity of
+each subpopulation.
+
+""")
     end
 end
 
@@ -272,43 +350,70 @@ end
 
 
 function specimen_selector(len; id="specimen-slider")
-    daq_slider(id  = id,
-               min = 1,
-               max = len,
-               marks = Dict([Symbol(v) => Symbol(v) for v in 1:len]),
-               value = len,
-               step = nothing,
-               persistence = true,
-               updatemode = "mouseup",
-               )
+    return specimen_dropdown([])
+
+    # dcc_slider(id  = id,
+    #            min = 1,
+    #            max = len,
+    #            marks = Dict([Symbol(v) => Symbol(v) for v in 1:len]),
+    #            value = len,
+    #            step = nothing,
+    #            persistence = true,
+    #            persistence_type = "session",
+    #            updatemode = "mouseup",
+    #            )
 end
 
 
-function decompile_button()
-    html_button(id="decompile-button",
-                hidden=false,
-                children="PRESS TO DECOMPILE (AND WAIT)",
-                n_clicks = 0)
-end
+function decompilation_in_progress()
+    # html_button(id="decompile-button",
+    #             hidden=false,
+    #             children="PRESS TO DECOMPILE (AND WAIT)",
+    #             n_clicks = 0)
 
-
-function specimen_report(g, len; id="specimen-report")
-    title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
-
-    specimen_report = html_div(id=id) do
-        html_h1(title),
-        specimen_selector(len, id="specimen-slider"),
-        specimen_summary(g, title, id="specimen-summary"),
-        html_div(id = "specimen-decompilation") do
-            decompile_button()
-        end,
-        html_hr(),
-        disassembly(g, id="specimen-disassembly")
+    html_div(id="decompilation-in-progress") do
+        html_h2("Decompilation in progress..."),
+        html_img(id="decompiling-hourglass", src="/assets/img/hourglass.gif")
     end
 end
 
+
+function specimen_report(g, len;
+                         id="specimen-report")
+    title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
+
+    [
+        html_h2(title),
+        html_hr(),
+        specimen_summary(g, title, id="specimen-summary"),
+        html_hr(),
+        specimen_decompilation_container(),
+        html_hr(),
+        disassembly(g, id="specimen-disassembly"),
+    ]
+end
+
+
+function make_specimen_dropdown_options(specimen_vec::Vector)
+    specimens = JSON.parse.(specimen_vec)
+    s = sort(collect(enumerate(specimens)), by=p->p[2]["performance"])
+    [
+        (label="""Generation $(j["generation"]): $(j["name"]), performance: $(round(j["performance"], digits=4))""", value=i) for (i,j) in s
+    ] |> reverse
+end
+
+# TODO: to replace the slider, maybe
+function specimen_dropdown(specimen_vec::Vector)
+    options = make_specimen_dropdown_options(specimen_vec)
+    dcc_dropdown(id="specimen-dropdown",
+                 placeholder="Choose a specimen to examine",
+                 persistence=true,
+                 persistence_type="session",
+                 options=options,
+                 )
+end
+
 LOGGER = nothing
-LAYOUT_INITIALIZED = false
 
 # TODO consider refactoring. You don't actually need to rebuild the layout
 # on every refresh. instead, just update the global LOGGER variable.
@@ -331,8 +436,32 @@ function decode_table(blob)
 end
 
 
-function generate_main_page(L)
-    @debug "Entering generate_main_page with logger $(L.name)"
+function stats_dropdown(;options, value=options)
+    options = [(label = fix_name(v), value = v) for v in options]
+    dcc_dropdown(
+        id= "stats-dropdown",
+        options = options,
+        value = value,
+        persistence = true,
+        persistence_type = "session",
+        multi = true,
+    )
+end
+
+function specimen_decompilation_container()
+    html_div(id="specimen-decompilation-container") do
+        decompilation_in_progress(),
+        html_div(id="decompilation-cache",
+                 children = json(Dict()),
+                 style = Dict("display" => "None")),
+        html_div(id="specimen-decompilation")
+    end
+end
+
+# FIXME do NOT put the content here. just put the containers
+# and then update the content through individual callbacks
+# triggered by changes in the data container
+function generate_main_page(config)
     ##
     # L just needs to be an object with the fields:
     # - table
@@ -346,43 +475,35 @@ function generate_main_page(L)
     #push!(content, html_h1("REFUSR UI", style = Dict("textAlign" => "center")))
 
     # Let's add some graphs
-    plot_container = html_div(id="plot-container") do
-        # TODO: a dictionary prettyfying the names of the columns
-        plot_stat(L.table,
-                  cols=[:objective_meanfinite, :objective_maximum],
-                  names=["mean performance", "best performance"],
-                  title="Time Series Plot")
+    statistics = html_div(id="statistics") do
+        html_div(id="plot-container"),
+        html_div(id="stats-dropdown-container") do
+            stats_dropdown(options=[:objective_meanfinite, :objective_maximum])
+        end,
+        html_div(id="table-container") do
+            #    generate_table(L.table, 10, id="stats-table")
+        end #,
+        #html_button(id="table-refresh", "PRESS TO REFRESH")
     end
 
-    push!(content, plot_container)
 
-    stats_dropdown = dcc_dropdown(
-        id= "stats-dropdown",
-        options = [(label = col, value = Symbol(col))
-                   for col in filter(x->x!="iteration_mean", names(L.table))],
-        value = [:objective_meanfinite, :objective_maximum],
-        multi = true,
-    )
+    push!(content, statistics)
 
-    push!(content, stats_dropdown)
 
-    table_container = html_div(id="table-container") do
-        generate_table(L.table, 10, id="stats-table")
-    end
-    push!(content, table_container)
-    push!(content, html_button(id="table-refresh", "PRESS TO REFRESH"))
-
-    push!(content, interaction_matrix_viewer(L, id="interaction-matrices"))
+    push!(content, interaction_matrix_viewer(1, id="interaction-matrices"))
 
     # A specimen report
-    report = if !isempty(L.specimens)
-        specimen_report(L.specimens[end], length(L.specimens))
-    else
-        html_div(id="specimen-report")
-    end
+    #report = if !isempty(L.specimens)
+    #    specimen_report(L.specimens[end], length(L.specimens))
+    #else
+    #html_div(id="specimen-report")
+    #end
 
     specimen_report_container = html_div(id="specimen-report-container") do
-        report
+        html_h1("Specimen Report"),
+        specimen_selector(1, id="specimen-slider"),
+        html_div(id="specimen-jar", children=[], style=Dict("display" => "None")),
+        html_div(id="specimen-report")
     end
 
     push!(content, specimen_report_container)
@@ -390,8 +511,9 @@ function generate_main_page(L)
     config_txt = html_div(id="config-txt") do
         html_hr(),
         html_h1("Configuration for this Experiment"),
-        html_pre("$(L.config.yaml)"),
-        html_hr()
+        html_pre("$(config.yaml)"),
+        html_hr(),
+        html_a(href="file://$(config.logging.dir)", "Log directory: $(config.logging.dir)")
     end
 
     push!(content, config_txt)
@@ -427,15 +549,19 @@ end
 # way of preventing callbacks from executing if there's no new data.
 ##
 function get_logger(log_dir, mod_time)
-    @debug "Deserializing logger from $(log_dir)/.L.dump"
     path = "$(log_dir)/.L.dump"
+    if !isfile(path)
+        @debug "$(path) does not exist yet"
+        throw(PreventUpdate())
+    end
+    # TODO check if file exists
     new_mod_time = mtime(path) |> unix2datetime
     old_mod_time = DateTime(mod_time)
-    if old_mod_time < new_mod_time
+    if true || old_mod_time < new_mod_time # FIXME
         @debug "$(path) has changed, deserializing Logger" old_mod_time new_mod_time
         (deserialize(path), new_mod_time)
     else
-        error("Logger unchanged (benign)")
+        throw(PreventUpdate())
     end
 end
 
@@ -444,7 +570,8 @@ end
 function with_logger(loginfo, method, args...)
     log_dir, mod_time = loginfo
     L, new_mod_time = get_logger(log_dir, mod_time)
-    (method(L, args...), [log_dir, new_mod_time])
+    loginfo_children = [log_dir, new_mod_time]
+    (method(L, args...), loginfo_children)
 end
 
 
@@ -453,40 +580,113 @@ callback!(
     UI,
     Output("interaction-matrices-image", "src"),
     Input("interaction-matrices-slider", "value"),
-    Input("im-data-container", "children"),
+    State("im-data-container", "children"),
 ) do im_idx, im_vec
+    if isempty(im_vec)
+        throw(PreventUpdate())
+    end
+    if isnothing(im_idx)
+        im_idx = length(im_vec)
+    end
     interaction_matrix_image(im_vec[im_idx])
+end
+
+callback!(
+    UI,
+    #Output("specimen-slider", "max"),
+    #Output("specimen-slider", "marks"),
+    Output("specimen-dropdown", "options"),
+    Input("specimen-data-container", "children"),
+) do specimen_vec
+    if isempty(specimen_vec)
+        throw(PreventUpdate())
+    end
+    make_specimen_dropdown_options(specimen_vec)
+
+    # slider_max = length(specimen_vec)
+    # slider_marks = Dict([Symbol(v) => Symbol(v) for v in 1:slider_max])
+    # (slider_max, slider_marks)
 end
 
 
 callback!(
     UI,
-    Output("specimen-report-container", "children"),
-    Input("specimen-slider", "value"),
-    Input("specimen-data-container", "children"),
-) do specimen_index, specimen_vec
+    Output("interaction-matrices-slider", "max"),
+    Output("interaction-matrices-slider", "marks"),
+    Output("interaction-matrices-slider", "value"),
+    Input("im-data-container", "children"),
+    State("interaction-matrices-slider", "value"),
+) do im_vec, _cur_val
+    if isempty(im_vec)
+        throw(PreventUpdate())
+    end
+    slider_max = length(im_vec)
+    slider_marks = Dict(Symbol(v) => Symbol(v) for v in 1:slider_max)
+    (slider_max, slider_marks, slider_max)
+end
+
+callback!(
+    UI,
+    Output("specimen-report", "children"),
+    Output("specimen-jar", "children"),
+    Input("specimen-dropdown", "value"),
+    State("specimen-data-container", "children"),
+) do specimen_index, specimen_vec 
+    if isempty(specimen_vec)
+        throw(PreventUpdate())
+    end
+    if isnothing(specimen_index)
+        specimen_index = length(specimen_vec)
+    end
     # Creature knows how to parse JSON
-    specimen = LinearGenotype.Creature(specimen_vec[specimen_index])
+    i = mod1(specimen_index, length(specimen_vec))
+    specimen = LinearGenotype.Creature(specimen_vec[i])
     @debug "Generating report for specimen $(specimen.name)"
-    return specimen_report(specimen, length(specimen_vec))
+    report = specimen_report(specimen, length(specimen_vec))
+    (report, [specimen_vec[i]])
 end
 
 callback!(
     UI,
     Output("specimen-decompilation", "children"),
-    Output("decompile-button", "hidden"),
-    Input("decompile-button", "n_clicks"),
-    State("specimen-slider", "value"),
-    State("specimen-data-container", "children"),
-) do clicks, specimen_index, specimen_vec
-    if clicks != 1
-        return decompile_button(), false
+    Output("decompilation-in-progress", "hidden"),
+    Output("decompilation-cache", "children"),
+    #Input("decompile-button", "n_clicks"),
+    Input("specimen-jar", "children"),
+    State("decompilation-cache", "children"),
+) do specimen_jar, cache
+    if isempty(specimen_jar)
+        throw(PreventUpdate())
     end
-    specimen = LinearGenotype.Creature(specimen_vec[specimen_index])
-    @debug "Decompiling specimen $(specimen.name)..." specimen_index clicks
-    return decompilation(specimen), true
+    @debug "Decompile button clicks" clicks
+    #if clicks != 1
+    #    throw(PreventUpdate())
+    #end
+    specimen = LinearGenotype.Creature(specimen_jar[1])
+    D = JSON.parse(cache)
+    if specimen.name ∈ keys(D)
+        d = D[specimen.name]
+        return decompilation(d), true, cache
+    else
+        d = decompilation_helper(specimen)
+        D[specimen.name] = d
+        return decompilation(d), true, json(D)
+    end
 end
 
+
+callback!(
+    UI,
+    Output("stats-dropdown-container", "children"),
+    Input("table-data-container", "children"),
+    State("stats-dropdown", "value"),
+) do blob, selection
+    j = JSON.parse(blob)
+    @debug "Getting columns for dropdown" j["columns"]
+    stats_dropdown(options=Symbol.(j["columns"]), value=selection)
+end
+# passing the current value through as a hint that this callback should be executed
+# before the one that builds the plot
 
 
 callback!(
@@ -507,16 +707,15 @@ end
 callback!(
     UI,
     Output("data-container", "children"),
-    Output("main", "children"),
     Output("loginfo", "children"),
     Input("main-interval", "n_intervals"),
     Input("pause-switch", "value"),
     State("loginfo", "children"),
 ) do n_intervals, pause, loginfo
-    @assert !pause "Refreshing paused (benign)"
-    fn = L -> (populate_data_container(L), generate_main_page(L))
-    ((data_children, main_children), loginfo) = with_logger(loginfo, fn)
-    (data_children, main_children, loginfo)
+    if pause
+        throw(PreventUpdate())
+    end
+    with_logger(loginfo, populate_data_container)
 end
 ## Consider:
 # Things might run more smoothly if we stream data to disk, and then use callbacks

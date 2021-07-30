@@ -232,6 +232,7 @@ end
 
 
  
+percent(a,b) = "$(round(a/b, digits=2))%"
 
 const __simplify = let CACHE = Cache(),
     hits = 0,
@@ -242,10 +243,11 @@ function simplify_(e::Expr)::Union{Bool, Expr, Symbol}
     function check_cache(e)
         if USE_CACHE
             start_at = now()
-            queries > 0 && @debug "Cache stats" hits queries (hits / queries) CACHE.currentsize (CACHE.currentsize / CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+            queries > 0 && @debug "Cache stats" hits queries percent(hits, queries) CACHE.currentsize percent(CACHE.currentsize, CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
             try
                 result = CACHE[e]
                 hits += 1
+                queries += 1
                 cache_time += (now() - start_at).value
                 return result
             catch KeyError
