@@ -2,13 +2,13 @@
 
 export GTK_PATH="/usr/lib/x86_64-linux-gnu/gtk-3.0:$PATH"
 export DASH_HOT_RELOAD=0
-export JULIA_DEBUG="Main"
-export REFUSR_DEBUG="1"
+#export JULIA_DEBUG="Main"
+#export REFUSR_DEBUG="1"
 
 [ -n "$REFUSR_PROCS" ] || REFUSR_PROCS=$2
 [ -n "$REFUSR_PROCS" ] || REFUSR_PROCS=4
 
 IMAGE=""
-[ -n "$REFUSR_IMAGE" ] && IMAGE="-Jrefusr.so"
+#[ -n "$REFUSR_IMAGE" ] && IMAGE="-Jrefusr.so"
 
 exec julia $IMAGE --startup-file no --project ./src/start.jl $1

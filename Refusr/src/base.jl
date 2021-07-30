@@ -21,6 +21,7 @@ using PlotlyBase
 using ProgressMeter
 using Setfield
 using Statistics
+using Printf
 
 include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
@@ -37,7 +38,7 @@ meanfinite(s) = mean(filter(isfinite, s))
 stdfinite(s) = std(filter(isfinite, s))
 
 function get_likeness(g)
-    isnothing(g.likeness) ? -Inf : maximum(g.likeness)
+    isempty(g.likeness) ? -Inf : maximum(g.likeness)
 end
 
 DEFAULT_CONFIG_FIELDS = [
@@ -48,6 +49,7 @@ DEFAULT_CONFIG_FIELDS = [
     ["experiment"] => Names.rand_name(2),
     ["selection", "t_size"] => 6,
     ["selection", "lexical"] => true,
+    ["logging", "dir"] => "$(ENV["HOME"])/logs/refusr/",
 ]
 
 function prep_config(path)
@@ -55,6 +57,11 @@ function prep_config(path)
     data = CSV.read(config.selection.data, DataFrame)
     data_n = ncol(data) - 1
     config = @set config.genotype.data_n = data_n
+    n = now()
+    config = @set config.experiment = (
+        @sprintf "%s.%02d-%02d" config.experiment hour(n) minute(n)
+    )
+    config = @set config.logging.dir = Cockatrice.Logging.make_log_dir(config.experiment)
     config
 end
 
@@ -77,12 +84,12 @@ TRACERS = [
     (key="objective", callback=objective_performance, rate=0.01),
     (key="fitness_1", callback=g->g.fitness[1], rate=0.01),
     (key="fitness_2", callback=g->g.fitness[2], rate=0.01),
-    #(key="fitness_3", callback=g->g.fitness[3], rate=1.0),
+    (key="fitness_3", callback=g->g.fitness[3], rate=1.0),
     (key="chromosome_len", callback=g->length(g.chromosome), rate=0.01),
     (key="effective_len", callback=g->isnothing(g.effective_code) ? -Inf : length(g.effective_code), rate=0.01),
     (key="num_offspring", callback=g->g.num_offspring, rate=0.01),
     (key="generation", callback=g->g.generation, rate=0.01),
-    #(key="likeness", callback=get_likeness, rate=0.01),
+    (key="likeness", callback=get_likeness, rate=0.01),
 ]
 
 
@@ -96,6 +103,9 @@ LOGGERS = [
     (key="fitness_2", reducer=maximum),
     (key="fitness_2", reducer=meanfinite),
     (key="fitness_2", reducer=std),
+    (key="fitness_3", reducer=meanfinite),
+    (key="fitness_3", reducer=maximum),
+    (key="fitness_3", reducer=std),
     (key="chromosome_len", reducer=Statistics.maximum),
     (key="chromosome_len", reducer=Statistics.mean),
     (key="effective_len", reducer=Statistics.maximum),
@@ -103,7 +113,7 @@ LOGGERS = [
     (key="num_offspring", reducer=maximum),
     (key="num_offspring", reducer=Statistics.mean),
     (key="generation", reducer=Statistics.mean),
-    #(key="likeness", reducer=meanfinite),
+    (key="likeness", reducer=meanfinite),
 ]
 
 pipinstall(package) = run(`$(PyCall.python) -m pip install $(package)`)

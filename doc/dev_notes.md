@@ -5,15 +5,14 @@ Decompilation and Simplification
 
 In order for our results to be of any use to a subject area expert, we translate the programs that constitute our genetic representations into concise symbolic expressions.
 
-We use a combination of techniques, here.
-
 Decompiling Linear Instruction Code to Symbolic Expression Trees
 ----------------------------------------------------------------
 
 REFUSR's linear genotypes are composed of a series of primitive register transfer instructions. They resemble assembly code for a simple virtual machine.
 
 ~~~{.asm}
-TODO: example
+TODO: example, use a 4-to-1 mux champion, and then show the
+decompiled expression as well.
 ~~~
 
 Internally, each instruction is defined as a Julia `struct`, with fields for the source and destination register, the operator (a function), and that operator's arity. (Though we're currently not using any, since they invariably destroy execution information and inhibit evolutionary search, constants can be defined as nullary functions in this fashion, by setting the arity field to zero, and the operator field to `() -> true` or `() -> false`.)
