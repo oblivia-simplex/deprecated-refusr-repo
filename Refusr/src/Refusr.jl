@@ -43,7 +43,10 @@ function launch(config_path)
     run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)"`)
 
 
-    health_callback = _ -> (@assert Dashboard.check_server(config) "Server down")
+    health_callback = L -> begin
+        @assert Dashboard.check_server(config) "Server down"
+        @info "Iteration $(L.table |> nrow)" length(L.specimens) Base.summarysize(L)
+    end
     fitness_function = FF.fit #Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     #@assert fitness_function isa Function
 
@@ -79,6 +82,7 @@ function launch(config_path)
     champion = sort(elites, by=objective_performance)[end]
     push!(logger.specimens, champion)
     @info "Sending data on champion to dashboard" Dashboard.check_server(config)
+    Cockatrice.Logging.dump_logger(logger)
     #Dashboard.ui_callback(logger) #, champion_md)
     # might as well decompile the specimens while we're waiting.
     # @async begin

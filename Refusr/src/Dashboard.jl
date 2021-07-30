@@ -307,7 +307,7 @@ function interaction_matrix_viewer(n; id="interaction-matrices")
         dcc_slider(id="interaction-matrices-slider",
                    min = 1,
                    max = n,
-                   marks = [Dict(Symbol(1) => Symbol(1))],
+                   marks = Dict(Symbol(1) => Symbol(1)),
                    value = n,
                    persistence = true,
                    persistence_type = "session",
@@ -393,12 +393,19 @@ function specimen_report(g, len;
     ]
 end
 
+function make_specimen_dropdown_options(specimens::Vector)
+    #specimens = JSON.parse.(specimen_vec)
+    s = sort(collect(enumerate(specimens)), by=p->p[2].performance)
+    [
+        (label="""Island $(g.native_island), Generation $(g.generation): $(g.name), performance: $(round(g.performance, digits=4))""", value=i) for (i,g) in s
+    ] |> reverse
+end
 
-function make_specimen_dropdown_options(specimen_vec::Vector)
+function _make_specimen_dropdown_options(specimen_vec::Vector)
     specimens = JSON.parse.(specimen_vec)
     s = sort(collect(enumerate(specimens)), by=p->p[2]["performance"])
     [
-        (label="""Generation $(j["generation"]): $(j["name"]), performance: $(round(j["performance"], digits=4))""", value=i) for (i,j) in s
+        (label="""Island $(j["native_island"]), Generation $(j["generation"]): $(j["name"]), performance: $(round(j["performance"], digits=4))""", value=i) for (i,j) in s
     ] |> reverse
 end
 
@@ -526,7 +533,8 @@ end
 
 
 function populate_data_container(L)
-    [
+    @debug "In populate_data_container"
+    @time children = [
         html_div(id="table-data-container") do
         L.table |> encode_table
         end,
@@ -537,6 +545,8 @@ function populate_data_container(L)
         interaction_matrix_image.(L.im_log)
         end,
     ]
+    @debug "Size of data container's children:" Base.summarysize(children)
+    return children
 end
 
 ###
@@ -548,16 +558,18 @@ end
 # since mod_time. This is fine. Dash.jl will catch it, and it's a useful
 # way of preventing callbacks from executing if there's no new data.
 ##
-function get_logger(log_dir, mod_time)
+function get_logger(log_dir, mod_time=nothing)
     path = "$(log_dir)/.L.dump"
     if !isfile(path)
-        @debug "$(path) does not exist yet"
         throw(PreventUpdate())
+    end
+    if isnothing(mod_time)
+        return deserialize(path)
     end
     # TODO check if file exists
     new_mod_time = mtime(path) |> unix2datetime
     old_mod_time = DateTime(mod_time)
-    if true || old_mod_time < new_mod_time # FIXME
+    if old_mod_time < new_mod_time # FIXME
         @debug "$(path) has changed, deserializing Logger" old_mod_time new_mod_time
         (deserialize(path), new_mod_time)
     else
@@ -580,8 +592,12 @@ callback!(
     UI,
     Output("interaction-matrices-image", "src"),
     Input("interaction-matrices-slider", "value"),
-    State("im-data-container", "children"),
-) do im_idx, im_vec
+    #State("im-data-container", "children"),
+    Input("loginfo", "children"),
+) do im_idx, loginfo
+    log_dir, _mod_time = loginfo
+    L = get_logger(log_dir)
+    im_vec = L.im_log
     if isempty(im_vec)
         throw(PreventUpdate())
     end
@@ -596,8 +612,12 @@ callback!(
     #Output("specimen-slider", "max"),
     #Output("specimen-slider", "marks"),
     Output("specimen-dropdown", "options"),
-    Input("specimen-data-container", "children"),
-) do specimen_vec
+    #Input("specimen-data-container", "children"),
+    Input("loginfo", "children"),
+) do loginfo
+    log_dir, _mod_time = loginfo
+    L = get_logger(log_dir)
+    specimen_vec = L.specimens
     if isempty(specimen_vec)
         throw(PreventUpdate())
     end
@@ -614,14 +634,18 @@ callback!(
     Output("interaction-matrices-slider", "max"),
     Output("interaction-matrices-slider", "marks"),
     Output("interaction-matrices-slider", "value"),
-    Input("im-data-container", "children"),
+    #Input("im-data-container", "children"),
+    Input("loginfo", "children"),
     State("interaction-matrices-slider", "value"),
-) do im_vec, _cur_val
-    if isempty(im_vec)
+) do loginfo, _cur_val
+    log_dir, _mod_time = loginfo
+    L = get_logger(log_dir)
+    # FIXME crazy amount of data movement to get an int!!
+    slider_max = length(L.im_log)
+    if slider_max == 0
         throw(PreventUpdate())
     end
-    slider_max = length(im_vec)
-    slider_marks = Dict(Symbol(v) => Symbol(v) for v in 1:slider_max)
+    slider_marks = Dict("" => "" for v in 1:slider_max)
     (slider_max, slider_marks, slider_max)
 end
 
@@ -630,8 +654,13 @@ callback!(
     Output("specimen-report", "children"),
     Output("specimen-jar", "children"),
     Input("specimen-dropdown", "value"),
-    State("specimen-data-container", "children"),
-) do specimen_index, specimen_vec 
+    Input("loginfo", "children"),
+    State("specimen-jar", "children"),
+    #State("specimen-data-container", "children"),
+) do specimen_index, loginfo, jar
+    log_dir, _mod_time = loginfo
+    L = get_logger(log_dir)
+    specimen_vec = L.specimens
     if isempty(specimen_vec)
         throw(PreventUpdate())
     end
@@ -640,10 +669,13 @@ callback!(
     end
     # Creature knows how to parse JSON
     i = mod1(specimen_index, length(specimen_vec))
-    specimen = LinearGenotype.Creature(specimen_vec[i])
+    specimen = specimen_vec[i] # LinearGenotype.Creature(specimen_vec[i])
+    if !isempty(jar) && specimen.name == JSON.parse(jar[1])["name"]
+        throw(PreventUpdate())
+    end
     @debug "Generating report for specimen $(specimen.name)"
     report = specimen_report(specimen, length(specimen_vec))
-    (report, [specimen_vec[i]])
+    (report, [json(specimen_vec[i])])
 end
 
 callback!(
@@ -658,10 +690,6 @@ callback!(
     if isempty(specimen_jar)
         throw(PreventUpdate())
     end
-    @debug "Decompile button clicks" clicks
-    #if clicks != 1
-    #    throw(PreventUpdate())
-    #end
     specimen = LinearGenotype.Creature(specimen_jar[1])
     D = JSON.parse(cache)
     if specimen.name ∈ keys(D)
@@ -678,12 +706,15 @@ end
 callback!(
     UI,
     Output("stats-dropdown-container", "children"),
-    Input("table-data-container", "children"),
+    #Input("table-data-container", "children"),
+    Input("loginfo", "children"),
     State("stats-dropdown", "value"),
-) do blob, selection
-    j = JSON.parse(blob)
-    @debug "Getting columns for dropdown" j["columns"]
-    stats_dropdown(options=Symbol.(j["columns"]), value=selection)
+) do loginfo, selection
+    #j = JSON.parse(blob)
+    log_dir, _mod_time = loginfo
+    L = get_logger(log_dir)
+
+    stats_dropdown(options=Symbol.(names(L.table)), value=selection)
 end
 # passing the current value through as a hint that this callback should be executed
 # before the one that builds the plot
@@ -693,10 +724,14 @@ callback!(
     UI,
     Output("table-container", "children"),
     Output("plot-container", "children"),
+    Input("loginfo", "children"),
     Input("stats-dropdown", "value"),
-    Input("table-data-container", "children")
-) do plot_columns, blob
-    table = decode_table(blob)
+    #Input("table-data-container", "children")
+) do loginfo, plot_columns #, blob
+    #table = decode_table(blob)
+    log_dir, mod_time = loginfo
+    L = get_logger(log_dir)
+    table = L.table
     (generate_table(table, 10),
      plot_stat(table,
                cols=plot_columns,
@@ -704,19 +739,40 @@ callback!(
 end
 
 
+
 callback!(
     UI,
-    Output("data-container", "children"),
     Output("loginfo", "children"),
     Input("main-interval", "n_intervals"),
     Input("pause-switch", "value"),
     State("loginfo", "children"),
 ) do n_intervals, pause, loginfo
-    if pause
+    log_dir, mod_time = loginfo
+    dump_path = "$(log_dir)/.L.dump"
+    if !(isfile(dump_path))
         throw(PreventUpdate())
     end
-    with_logger(loginfo, populate_data_container)
+    new_mod_time = mtime(dump_path) |> unix2datetime
+    old_mod_time = DateTime(mod_time)
+    if old_mod_time == new_mod_time
+        throw(PreventUpdate())
+    end
+    [log_dir, string(new_mod_time)]
 end
+
+# callback!(
+#     UI,
+#     Output("data-container", "children"),
+#     Output("loginfo", "children"),
+#     Input("main-interval", "n_intervals"),
+#     Input("pause-switch", "value"),
+#     State("loginfo", "children"),
+# ) do n_intervals, pause, loginfo
+#     if pause
+#         throw(PreventUpdate())
+#     end
+#     @time with_logger(loginfo, populate_data_container)
+# end
 ## Consider:
 # Things might run more smoothly if we stream data to disk, and then use callbacks
 # in the UI to dynamically read and render that data.
