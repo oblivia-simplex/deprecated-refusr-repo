@@ -232,7 +232,7 @@ end
 
 
  
-percent(a,b) = "$(round(a/b, digits=2))%"
+percent(a,b) = "$(round(100*a/b, digits=2))%"
 
 const __simplify = let CACHE = Cache(),
     hits = 0,
