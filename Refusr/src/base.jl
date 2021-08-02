@@ -42,6 +42,7 @@ function get_likeness(g)
 end
 
 DEFAULT_CONFIG_FIELDS = [
+    ["dashboard", "enable"] => true,
     ["dashboard", "port"] => 9123,
     ["dashboard", "server"] => "0.0.0.0",
     ["step_duration"] => 1,
@@ -50,6 +51,7 @@ DEFAULT_CONFIG_FIELDS = [
     ["selection", "t_size"] => 6,
     ["selection", "lexical"] => true,
     ["logging", "dir"] => "$(ENV["HOME"])/logs/refusr/",
+    ["genotype", "weight_crossover_points"] => true,
 ]
 
 function prep_config(path)
@@ -163,7 +165,9 @@ function fake_logger()
     evoL = mkevo()
     @showprogress for i in 1:100; Cockatrice.Evo.step!(evoL); end
     for i in 1:100
-        push!(L.specimens, rand(evoL.geo.deme))
+        Cockatrice.Logging.add_specimen(L, rand(evoL.geo.deme))
     end
     return L, evoL
 end
+
+# TODO: what if you cached abstract expressions, modulo renaming of variables?
