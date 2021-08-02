@@ -80,8 +80,11 @@ end
 
 stopping_condition(evo) = !isempty(evo.elites) && (objective_performance.(evo.elites) |> maximum) == 1.0
 
+# TODO: why not just trace stats at end of step_for_duration?!
+# The logger never sees anything else.
+
 TRACERS = [
-    (key="objective", callback=objective_performance, rate=0.01),
+    (key="objective", callback=objective_performance, rate=1.00),
     (key="fitness_1", callback=g->g.fitness[1], rate=0.01),
     (key="fitness_2", callback=g->g.fitness[2], rate=0.01),
     (key="fitness_3", callback=g->g.fitness[3], rate=1.0),

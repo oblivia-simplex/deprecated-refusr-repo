@@ -10,7 +10,7 @@ selection:
   t_size: 6
   fitness_sharing: true
   trace: true
-  lexical: false
+  lexical: true
 
 genotype:
   max_depth: 8
