@@ -21,6 +21,7 @@ genotype:
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1
+  weight_crossover_points: true
 
 population:
   size: [10, 10]
@@ -33,3 +34,8 @@ population:
 logging:
   log_every: 1
   save_every: 50
+
+dashboard:
+  server: "0.0.0.0"
+  port: 9124
+  enable: true

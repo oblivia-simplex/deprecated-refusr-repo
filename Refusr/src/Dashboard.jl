@@ -19,6 +19,7 @@ using Base64
 using PlotlyBase
 using Plotly
 using Cockatrice.Logging: Logger
+using Cockatrice.Logging
 using Serialization
 
 
@@ -59,8 +60,6 @@ function initialize_server(;config,
 end
 
 
-function launcher_ui()
-end
 
 
 ## TODO: Decompile and plot AST, etc. on demand, not automatically.
@@ -116,6 +115,7 @@ function fix_name(col)
     end
 end
 
+
 function plot_stat(D::DataFrame;
                    cols::Vector,
                    id="stats-plot",
@@ -134,6 +134,7 @@ end
 
 
 function generate_table(D::DataFrame, max_rows = 10; id = "stats")
+
     range = if nrow(D) <= max_rows
         (1:nrow(D))
     else
@@ -153,7 +154,7 @@ function generate_table(D::DataFrame, max_rows = 10; id = "stats")
                            "border-spacing" => "15px",
                            "border" => "0px",
                        ),
-                       [html_thead(html_tr([html_th(col) for col in names(D)])),
+                       [html_thead(html_tr([html_th(fix_name(col)) for col in names(D)])),
                         html_tbody([
                             html_tr([html_td(round(D[r, c], digits=4)) for c in names(D)])
                             for r in range
@@ -273,6 +274,9 @@ end
 decompilation(g::LinearGenotype.Creature) = decompilation_helper(g) |> decompilation
 
 function interaction_matrix_image(ims::Array)
+    if isempty(ims)
+        return ""
+    end
     imgs = [colorant"white" .* im for im in ims]
     mos = mosaicview(imgs..., fillvalue=colorant"red", ncol=(length(imgs)÷2), npad=1)
 
@@ -350,7 +354,7 @@ end
 # at least it's just in the gui
 
 
-function specimen_selector(len; id="specimen-slider")
+function specimen_selector(len; id="specimen-dropdown")
     return specimen_dropdown([])
 
     # dcc_slider(id  = id,
@@ -366,20 +370,21 @@ function specimen_selector(len; id="specimen-slider")
 end
 
 
-function decompilation_in_progress()
+function decompilation_in_progress(;hidden=false)
     # html_button(id="decompile-button",
     #             hidden=false,
     #             children="PRESS TO DECOMPILE (AND WAIT)",
     #             n_clicks = 0)
 
-    html_div(id="decompilation-in-progress") do
+    style = hidden ? Dict("display" => "None") : Dict()
+    html_div(id="decompilation-in-progress", style = style) do
         html_h2("Decompilation in progress..."),
         html_img(id="decompiling-hourglass", src="/assets/img/hourglass.gif")
     end
 end
 
 
-function specimen_report(g, len;
+function specimen_report(g;
                          id="specimen-report")
     title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
 
@@ -389,13 +394,14 @@ function specimen_report(g, len;
         html_hr(),
         specimen_summary(g, title, id="specimen-summary"),
         html_hr(),
-        specimen_decompilation_container(),
+        specimen_decompilation_container(hidden=false),
         html_hr(),
         disassembly(g, id="specimen-disassembly"),
+        html_div(id="current-report-name", g.name, style=Dict("display" => "None"))
     ]
 end
 
-function make_specimen_dropdown_options(specimens::Vector)
+function __make_specimen_dropdown_options(specimens::Vector)
     #specimens = JSON.parse.(specimen_vec)
     s = sort(collect(enumerate(specimens)), by=p->p[2].performance)
     [
@@ -411,10 +417,18 @@ function _make_specimen_dropdown_options(specimen_vec::Vector)
     ] |> reverse
 end
 
-# TODO: to replace the slider, maybe
-function specimen_dropdown(specimen_vec::Vector)
-    options = make_specimen_dropdown_options(specimen_vec)
-    dcc_dropdown(id="specimen-dropdown",
+
+function make_specimen_dropdown_options(specimen_files::Vector)
+    mklabel(d) = """Island $(d["isle"]), Generation $(d["gen"]): $(d["name"]), performance: $(d["perf"])"""
+    pre = [(label_info=Logging.parse_specimen_filename(f), value=f) for f in specimen_files]
+    sort!(pre, by=p->p[1]["perf"], rev=true)
+    [(label=mklabel(p.label_info), value=p.value) for p in pre]
+end
+
+
+function specimen_dropdown(specimen_files::Vector; id="specimen-dropdown")
+    options = make_specimen_dropdown_options(specimen_files)
+    dcc_dropdown(id=id,
                  placeholder="Choose a specimen to examine",
                  persistence=true,
                  persistence_type="session",
@@ -422,7 +436,6 @@ function specimen_dropdown(specimen_vec::Vector)
                  )
 end
 
-LOGGER = nothing
 
 # TODO consider refactoring. You don't actually need to rebuild the layout
 # on every refresh. instead, just update the global LOGGER variable.
@@ -434,6 +447,7 @@ function encode_table(table)
     data = reinterpret(UInt8, Array{Float64}(table)) |> base64encode
     (columns = columns, data = data) |> json
 end
+
 
 function decode_table(blob)
     j = JSON.parse(blob)
@@ -457,13 +471,15 @@ function stats_dropdown(;options, value=options)
     )
 end
 
-function specimen_decompilation_container()
+function specimen_decompilation_container(;hidden=false)
     html_div(id="specimen-decompilation-container") do
-        decompilation_in_progress(),
+        decompilation_in_progress(hidden=hidden),
         html_div(id="decompilation-cache",
                  children = json(Dict()),
                  style = Dict("display" => "None")),
-        html_div(id="specimen-decompilation")
+        html_div(id="specimen-decompilation"),
+        html_div(id="current-decompilation-name", "nothing has been decompiled yet",
+                 style=Dict("display" => "None"))
     end
 end
 
@@ -510,13 +526,13 @@ function generate_main_page(config)
 
     specimen_report_container = html_div(id="specimen-report-container") do
         html_h1("Specimen Report"),
-        specimen_selector(1, id="specimen-slider"),
+        specimen_dropdown([], id="specimen-dropdown"),
         html_div(id="specimen-jar", children=[], style=Dict("display" => "None")),
         html_div(id="specimen-report") do
-            html_div(id="decompilation-cache"),
-            html_div(id="decompilation-in-progress"),
-            html_div(id="specimen-decompilation")
-        end
+            specimen_decompilation_container()
+        end,
+        html_div(id="current-report-name", "no report has been generated yet",
+                 style=Dict("display" => "None"))
     end
 
     push!(content, specimen_report_container)
@@ -598,40 +614,39 @@ callback!(
     UI,
     Output("interaction-matrices-image", "src"),
     Input("interaction-matrices-slider", "value"),
-    #State("im-data-container", "children"),
     Input("loginfo", "children"),
 ) do im_idx, loginfo
     log_dir, _mod_time = loginfo
-    L = get_logger(log_dir)
-    im_vec = L.im_log
-    if isempty(im_vec)
+    if isnothing(im_idx)
+        im_idx = :last
+    end
+
+    try
+        @debug "interaction matrix time" im_idx
+        ims = Logging.read_ims_at_step(log_dir=log_dir, step=im_idx)
+        @debug "got ims" ims
+        interaction_matrix_image(ims)
+    catch e
+        @warn "error $(e) in interaction-matrix-image callback!"
+        
         throw(PreventUpdate())
     end
-    if isnothing(im_idx)
-        im_idx = length(im_vec)
-    end
-    interaction_matrix_image(im_vec[im_idx])
 end
 
 callback!(
     UI,
-    #Output("specimen-slider", "max"),
-    #Output("specimen-slider", "marks"),
     Output("specimen-dropdown", "options"),
-    #Input("specimen-data-container", "children"),
     Input("loginfo", "children"),
 ) do loginfo
     log_dir, _mod_time = loginfo
-    L = get_logger(log_dir)
-    specimen_vec = L.specimens
-    if isempty(specimen_vec)
+    specimen_files = Logging.list_specimen_files(log_dir)
+    @debug "in specimen-dropdown callback, to make options" specimen_files
+    if isempty(specimen_files)
         throw(PreventUpdate())
     end
-    make_specimen_dropdown_options(specimen_vec)
-
-    # slider_max = length(specimen_vec)
-    # slider_marks = Dict([Symbol(v) => Symbol(v) for v in 1:slider_max])
-    # (slider_max, slider_marks)
+    res = make_specimen_dropdown_options(specimen_files)
+    @debug "made options" res
+    return res
 end
 
 
@@ -645,9 +660,7 @@ callback!(
     State("interaction-matrices-slider", "value"),
 ) do loginfo, _cur_val
     log_dir, _mod_time = loginfo
-    L = get_logger(log_dir)
-    # FIXME crazy amount of data movement to get an int!!
-    slider_max = length(L.im_log)
+    slider_max = Logging.count_im_batches(log_dir)
     if slider_max == 0
         throw(PreventUpdate())
     end
@@ -658,30 +671,34 @@ end
 callback!(
     UI,
     Output("specimen-report", "children"),
-    Output("specimen-jar", "children"),
     Input("specimen-dropdown", "value"),
     Input("loginfo", "children"),
-    State("specimen-jar", "children"),
+    State("current-report-name", "children"),
     #State("specimen-data-container", "children"),
-) do specimen_index, loginfo, jar
+) do choice, loginfo, current_report_name
+
+    @debug "In specimen report callback " choice current_report_name
+ 
     log_dir, _mod_time = loginfo
-    L = get_logger(log_dir)
-    specimen_vec = L.specimens
-    if isempty(specimen_vec)
+
+    if isnothing(choice)
         throw(PreventUpdate())
     end
-    if isnothing(specimen_index)
-        specimen_index = length(specimen_vec)
-    end
-    # Creature knows how to parse JSON
-    i = mod1(specimen_index, length(specimen_vec))
-    specimen = specimen_vec[i] # LinearGenotype.Creature(specimen_vec[i])
-    if !isempty(jar) && specimen.name == JSON.parse(jar[1])["name"]
+
+    if occursin(current_report_name, choice)
         throw(PreventUpdate())
     end
+
+
+    specimen = Logging.read_specimen_file(log_dir=log_dir,
+                                          filename=choice,
+                                          constructor=LinearGenotype.Creature)
+
+    #if !isempty(jar) && specimen.name == JSON.parse(jar[1])["name"]
+    #    throw(PreventUpdate())
+    #end
     @debug "Generating report for specimen $(specimen.name)"
-    report = specimen_report(specimen, length(specimen_vec))
-    (report, [json(specimen_vec[i])])
+    specimen_report(specimen) #, length(specimen_vec))
 end
 
 callback!(
@@ -689,23 +706,35 @@ callback!(
     Output("specimen-decompilation", "children"),
     Output("decompilation-in-progress", "hidden"),
     Output("decompilation-cache", "children"),
-    #Input("decompile-button", "n_clicks"),
-    Input("specimen-jar", "children"),
+    Output("current-decompilation-name", "children"),
     Input("specimen-dropdown", "value"),
     State("decompilation-cache", "children"),
-) do specimen_jar, choice, cache
-    if isempty(specimen_jar) || isnothing(choice)
-        return ([], true, cache)
+    State("loginfo", "children"),
+    State("current-decompilation-name", "children"),
+) do choice, cache, loginfo, current_decompilation_name
+    @debug "In specimen decompilation callback " choice cache
+    if isnothing(choice)
+        throw(PreventUpdate())
     end
-    specimen = LinearGenotype.Creature(specimen_jar[1])
+
+    if occursin(current_decompilation_name, choice)
+        throw(PreventUpdate())
+    end
+
+    log_dir, _mod_time = loginfo
+    specimen = Logging.read_specimen_file(log_dir=log_dir,
+                                          filename=choice,
+                                          constructor=LinearGenotype.Creature)
+
+    @debug "In decompilation handler. specimen: $(specimen.name)"
     D = JSON.parse(cache)
     if specimen.name ∈ keys(D)
         d = D[specimen.name]
-        return decompilation(d), true, cache
+        return decompilation(d), true, cache, specimen.name
     else
         d = decompilation_helper(specimen)
         D[specimen.name] = d
-        return decompilation(d), true, json(D)
+        return decompilation(d), true, json(D), specimen.name
     end
 end
 
@@ -719,9 +748,8 @@ callback!(
 ) do loginfo, selection
     #j = JSON.parse(blob)
     log_dir, _mod_time = loginfo
-    L = get_logger(log_dir)
-
-    stats_dropdown(options=Symbol.(names(L.table)), value=selection)
+    names = Symbol.(split(readline("$(log_dir)/report.csv"), ","))
+    stats_dropdown(options=names, value=selection)
 end
 # passing the current value through as a hint that this callback should be executed
 # before the one that builds the plot
@@ -737,12 +765,16 @@ callback!(
 ) do loginfo, plot_columns #, blob
     #table = decode_table(blob)
     log_dir, mod_time = loginfo
-    L = get_logger(log_dir)
-    table = L.table
-    (generate_table(table, 10),
-     plot_stat(table,
-               cols=plot_columns,
-               title="Time Series Plots"))
+    try
+        table = Logging.read_table(log_dir)
+        (generate_table(table, 10),
+         plot_stat(table,
+                   cols=plot_columns,
+                   title="Time Series Plots"))
+    catch e # if file doesn't exist yet
+        @warn "error $(e) in table handler"
+        throw(PreventUpdate())
+    end
 end
 
 
@@ -755,11 +787,11 @@ callback!(
     State("loginfo", "children"),
 ) do n_intervals, pause, loginfo
     log_dir, mod_time = loginfo
-    dump_path = "$(log_dir)/.L.dump"
-    if !(isfile(dump_path))
+    stamp_path = "$(log_dir)/.L.stamp"
+    if !(isfile(stamp_path))
         throw(PreventUpdate())
     end
-    new_mod_time = mtime(dump_path) |> unix2datetime
+    new_mod_time = mtime(stamp_path) |> unix2datetime
     old_mod_time = DateTime(mod_time)
     if old_mod_time == new_mod_time
         throw(PreventUpdate())

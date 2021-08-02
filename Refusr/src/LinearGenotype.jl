@@ -307,7 +307,12 @@ function crop(seq, len)
     length(seq) > len ? seq[1:len] : seq
 end
 
-function splice_point(g)
+# TODO run some experiments and see if this actually improves over random
+# splice points
+function splice_point(g, weighted_by_trace_info=true)
+    if !weighted_by_trace_info
+        return rand(1:length(g.chromosome))
+    end
     weights = zeros(length(g.chromosome))
     weights[g.effective_indices] .= g.phenotype.trace_info
     sample(1:length(g.chromosome), Weights(weights), 1) |> first
@@ -318,8 +323,8 @@ function crossover(mother::Creature, father::Creature; config=nothing)::Vector{C
     father.num_offspring += 1
 
     
-    mx = splice_point(mother)
-    fx = splice_point(father)
+    mx = splice_point(mother, config.genotype.weight_crossover_points)
+    fx = splice_point(father, config.genotype.weight_crossover_points)
     chrom1 = [mother.chromosome[1:mx]; father.chromosome[(fx+1):end]]
     chrom2 = [father.chromosome[1:fx]; mother.chromosome[(mx+1):end]]
     len = config.genotype.max_len

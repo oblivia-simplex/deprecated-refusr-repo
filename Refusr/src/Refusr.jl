@@ -29,24 +29,23 @@ function launch(config_path)
     config = prep_config(config_path)
     logger = Cockatrice.Logging.Logger(LOGGERS, config)
 
-    server_task = Dashboard.initialize_server(
-        config=config,
-        background=true,
-    )
-
-    println("Waiting for server...")
-    while !Dashboard.check_server(config)
-        sleep(1)
-        print(".")
+    server_task = if config.dashboard.enable
+        task = Dashboard.initialize_server(
+            config=config,
+            background=true,
+        )
+        println("Waiting for server...")
+        while !Dashboard.check_server(config)
+            sleep(1)
+            print(".")
+        end
+        println()
+        run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)"`)
+        task
+    else
+        @async begin nothing end
     end
-    println()
-    run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)"`)
 
-
-    health_callback = L -> begin
-        @assert Dashboard.check_server(config) "Server down"
-        @info "Iteration $(L.table |> nrow)" length(L.specimens) Base.summarysize(L)
-    end
     fitness_function = FF.fit #Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     #@assert fitness_function isa Function
 
@@ -62,7 +61,9 @@ function launch(config_path)
               :stopping_condition => stopping_condition,
               :objective_performance => objective_performance,
               :WORKERS => WORKERS,
-              :callback => health_callback,
+              :callback => L -> begin
+              @info "[$(L.table.iteration_mean[end])] mean performance: $(L.table.objective_meanfinite[end])\t best performance: $(L.table.objective_maximum[end])"
+              end,
               :LOGGER => logger,
               ]
     # TODO: rename some of these logger vars
@@ -95,3 +96,13 @@ function launch(config_path)
     wait(server_task)
     return (world=world, logger=logger, champion=champion)
 end
+
+
+# TODO:
+# replace the very stupid L.dump slurper with some seek and read functions
+# that look only at
+# - the most recent rows of the csv
+# - the most recent IM files
+# - the most recent json specimen dumps
+
+# have the logger dump the most recent specimens to json files in a subdir
