@@ -42,7 +42,8 @@ function initialize_server(;config,
             now() |> string
         end,
         dcc_interval(id="main-interval", interval=update_interval*1000),
-        daq_toggleswitch(id="pause-switch", value=false, label="PAUSE", vertical=false),
+        daq_toggleswitch(id="pause-switch", value=false, label="PAUSE", vertical=false,
+                         style=Dict("display" => "None")),
         html_div(id="data-container", style = Dict("display" => "None")),
         generate_main_page(config)
     end
@@ -382,6 +383,7 @@ function specimen_report(g, len;
                          id="specimen-report")
     title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
 
+    # TODO: put a plot of the trace information curve here
     [
         html_h2(title),
         html_hr(),
@@ -510,7 +512,11 @@ function generate_main_page(config)
         html_h1("Specimen Report"),
         specimen_selector(1, id="specimen-slider"),
         html_div(id="specimen-jar", children=[], style=Dict("display" => "None")),
-        html_div(id="specimen-report")
+        html_div(id="specimen-report") do
+            html_div(id="decompilation-cache"),
+            html_div(id="decompilation-in-progress"),
+            html_div(id="specimen-decompilation")
+        end
     end
 
     push!(content, specimen_report_container)
@@ -685,10 +691,11 @@ callback!(
     Output("decompilation-cache", "children"),
     #Input("decompile-button", "n_clicks"),
     Input("specimen-jar", "children"),
+    Input("specimen-dropdown", "value"),
     State("decompilation-cache", "children"),
-) do specimen_jar, cache
-    if isempty(specimen_jar)
-        throw(PreventUpdate())
+) do specimen_jar, choice, cache
+    if isempty(specimen_jar) || isnothing(choice)
+        return ([], true, cache)
     end
     specimen = LinearGenotype.Creature(specimen_jar[1])
     D = JSON.parse(cache)
@@ -735,7 +742,7 @@ callback!(
     (generate_table(table, 10),
      plot_stat(table,
                cols=plot_columns,
-               title="Time Series Plot"))
+               title="Time Series Plots"))
 end
 
 

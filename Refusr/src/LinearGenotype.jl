@@ -2,6 +2,7 @@ module LinearGenotype
 
 using Printf
 using Distributed
+using StatsBase
 import JSON
 import Base.isequal
 
@@ -60,21 +61,25 @@ end
 end
 
 
-function strip_introns(code, out_regs)
+function get_effective_indices(code, out_regs)
     active_regs = copy(out_regs)
-    active_insts = []
-    for inst in reverse(code)
+    active_indices = []
+    for (i, inst) in reverse(enumerate(code) |> collect)
         semantic_intron(inst) && continue
         if inst.dst ∈ active_regs
-            push!(active_insts, inst)
+            push!(active_indices, i)
             filter!(r -> r != inst.dst, active_regs)
             inst.arity == 2 && push!(active_regs, inst.dst)
             inst.arity >= 1 && push!(active_regs, inst.src)
         end
     end
-    reverse(active_insts)
+    reverse(active_indices)
 end
 
+
+function strip_introns(code, out_regs)
+    code[get_effective_indices(code, out_regs)]
+end
 
 function byte_encoding(inst)
 
@@ -165,10 +170,12 @@ function to_expr(code::Vector{Inst}; intron_free=true, incremental_simplify=true
 end
  
 
+# TODO if we store effective_indices we don't need to store effective code
 Base.@kwdef mutable struct Creature
     chromosome::Vector{Inst}
     effective_code::Union{Nothing, Vector{Inst}}
-    phenotype
+    effective_indices = nothing
+    phenotype = nothing
     fitness::Vector{Float64}
     name::String
     generation::Int
@@ -180,6 +187,12 @@ Base.@kwdef mutable struct Creature
     native_island = myid() == 1 ? 1 : myid() - 1
 end
 
+function effective_code(g::Creature)
+    if g.effective_indices === nothing
+        g.effective_indices = get_effective_indices(g.chromosome, [1])
+    end
+    return g.chromosome[g.effective_indices]
+end
 
 function decompile(g::Creature; assign=true, incremental_simplify=true)
     if !isnothing(g.symbolic) && assign
@@ -233,6 +246,7 @@ function Creature(d::Dict)
     Creature(
         chromosome = Inst.(d["chromosome"]),
         effective_code = isnothing(d["effective_code"]) ? nothing : Inst.(d["effective_code"]),
+        effective_indices = isnothing(d["effective_indices"]) ? nothing : Vector{Int}(d["effective_indices"]),
         phenotype = phenotype,
         fitness = Vector{Float64}([isnothing(x) ? -Inf : x for x in d["fitness"]]),
         name = d["name"],
@@ -293,11 +307,19 @@ function crop(seq, len)
     length(seq) > len ? seq[1:len] : seq
 end
 
+function splice_point(g)
+    weights = zeros(length(g.chromosome))
+    weights[g.effective_indices] .= g.phenotype.trace_info
+    sample(1:length(g.chromosome), Weights(weights), 1) |> first
+end
+
 function crossover(mother::Creature, father::Creature; config=nothing)::Vector{Creature}
     mother.num_offspring += 1
     father.num_offspring += 1
-    mx = rand(1:length(mother.chromosome))
-    fx = rand(1:length(father.chromosome))
+
+    
+    mx = splice_point(mother)
+    fx = splice_point(father)
     chrom1 = [mother.chromosome[1:mx]; father.chromosome[(fx+1):end]]
     chrom2 = [father.chromosome[1:fx]; mother.chromosome[(mx+1):end]]
     len = config.genotype.max_len
@@ -423,7 +445,9 @@ end
 
 function FF.evaluate(g::Creature; INPUT::BitArray, config::NamedTuple, make_trace=true)
     if isnothing(g.effective_code)
-        g.effective_code = strip_introns(g.chromosome, [config.genotype.output_reg])
+        #g.effective_code = strip_introns(g.chromosome, [config.genotype.output_reg])
+        g.effective_indices = get_effective_indices(g.chromosome, [1])
+        g.effective_code = g.chromosome[g.effective_indices]
     end
     evaluate_vectoral(g.effective_code, INPUT=INPUT, config=config, make_trace=make_trace)
 end
@@ -438,7 +462,8 @@ end
 
 function effective_parsimony(g::Creature)
     if isnothing(g.effective_code)
-        g.effective_code = strip_introns(g.chromosome, [1])
+        g.effective_indices = get_effective_indices(g.chromosome, [1])
+        g.effective_code = g.chromosome[g.effective_indices]
     end
     length(g.effective_code) / length(g.chromosome)
 end
@@ -456,7 +481,8 @@ function stepped_parsimony(g::Creature, threshold::Int)
 end
 
 
-FF.parsimony(g::Creature) = effective_parsimony(g)
+# try just _parsimony TODO
+FF.parsimony(g::Creature) = stepped_parsimony(g::Creature, 50)
 
 
 ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :~ => "NOT"] |> Dict

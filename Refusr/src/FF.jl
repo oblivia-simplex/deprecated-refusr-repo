@@ -131,10 +131,16 @@ function trace_hamming(trace::BitArray, answers::BitArray)
 end
 
 
-function trace_mutinfo(trace::BitArray, answers::BitArray)
+function trace_information(trace::BitArray; answers=get_answers())
     x = view(trace, OUTREG, :, :)
-    map(x -> mutualinfo(answers, x), eachcol(x)) |> maximum
+    map(x -> mutualinfo(answers, x), eachcol(x))
 end
+
+function active_trace_information(;code, trace, answers=get_answers())
+    slices = (view(trace, r,:,n) for (n,r) in enumerate(i.dst for i in code))
+    [mutualinfo(answers, s) for s in slices]
+end
+
 
 ## NOTE on translating coordinates:
 # A[(i[2]-1)*(size(A,1))+i[1]] == A[i...]
@@ -164,33 +170,43 @@ function fit(geo, i)
     # be, as julia is really rather quick with its array and matrix operations.
     interaction_matrix = build_interaction_matrix(geo)
 
+    answers = get_answers()
+
     g.phenotype = if isnothing(g.phenotype)
         res, tr = evaluate(
             g,
             config=config,
             INPUT=INPUT,
             make_trace=true)
-        (results = res, trace = tr)
+
+        (results = res,
+         trace = tr,
+         # NOTE: we could actually reduce the trace to a vector, by tracking only
+         # the dst registers. if needed, the full trace could easily be reconstituted.
+         trace_info = active_trace_information(trace=tr, code=g.effective_code))
     else
         g.phenotype
     end
-    
+
+    if isempty(g.effective_code)
+        return [0,0,0]
+    end
+ 
     @assert g.phenotype.results isa BitArray "g is $(g), g.phenotype.results is $(g.phenotype.results |> typeof)"
     @assert g.phenotype.trace isa BitArray "g is $(g) g.phenotype.trace is $(g.phenotype.trace |> typeof)"
 
     # We could scan the trace here, and see if the program solved the problem
-    # at some intermediary stage.
+    # at some intermediary stage. (max trace hamming)
 
-    answers = get_answers()
-    mutinfo = trace_mutinfo(g.phenotype.trace, answers)
-    #mutualinfo(answers, g.phenotype.results)
-    # NOTE trace_consistency should be minimized. Let's make it negative.
-    #trace_con = -1.0 * trace_consistency(g.phenotype.trace, answers)
+    # NOTE trace_information should be minimized. Let's make it negative.
+    #trace_con = -1.0 * trace_information(g.phenotype.trace, answers)
+
     hamming = get_hamming(answers, g.phenotype.results, sharing=config.selection.fitness_sharing, IM=interaction_matrix) 
+
     update_interaction_matrix!(geo, i, g.phenotype.results)
     # Variety measures how different the program behaves with respect to input
     # variety = length(unique(g.phenotype.trace)) / length(g.phenotype.trace)
-    g.fitness = [hamming, mutinfo, parsimony(g)]
+    g.fitness = [hamming, maximum(g.phenotype.trace_info), parsimony(g)]
     return g.fitness
 end
 
