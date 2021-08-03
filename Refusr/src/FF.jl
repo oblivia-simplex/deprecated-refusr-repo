@@ -51,7 +51,7 @@ function _set_data(data::DataFrame)
 end
 
 
-hamming(a::BitArray, b::BitArray) = (!).(a .⊻ b)
+hamming(a, b) = (!).(a .⊻ b)
 
 mutualinfo(a, b) = get_mutual_information(a,b) / get_entropy(a)
 
@@ -136,9 +136,9 @@ function trace_information(trace::BitArray; answers=get_answers())
     map(x -> mutualinfo(answers, x), eachcol(x))
 end
 
-function active_trace_information(;code, trace, answers=get_answers())
+function active_trace_information(;code, trace, answers=get_answers(), measure=mutualinfo)
     slices = (view(trace, r,:,n) for (n,r) in enumerate(i.dst for i in code))
-    [mutualinfo(answers, s) for s in slices]
+    [measure(answers, s) for s in slices]
 end
 
 
@@ -179,11 +179,19 @@ function fit(geo, i)
             INPUT=INPUT,
             make_trace=true)
 
+        hamming(a, b) = (~).(a .⊻ b) |> mean
+
         (results = res,
          trace = tr,
          # NOTE: we could actually reduce the trace to a vector, by tracking only
          # the dst registers. if needed, the full trace could easily be reconstituted.
-         trace_info = active_trace_information(trace=tr, code=g.effective_code))
+         trace_info = active_trace_information(trace=tr,
+                                               code=g.effective_code,
+                                               measure=mutualinfo),
+         trace_hamming = active_trace_information(trace=tr,
+                                                  code=g.effective_code,
+                                                  measure=hamming))
+        
     else
         g.phenotype
     end

@@ -1,27 +1,27 @@
 module Dashboard
 
-using Distributed
+using ..Expressions
+using ..LinearGenotype
+using Base64
+using Cockatrice.Logging
+using Cockatrice.Logging: Logger
 using Dash
-using Dates
-using Memoize
-using LRUCache
-using DashDaq
 using DashCoreComponents
-using Images
-using FileIO
-using JSON
-using ImageIO
+using DashDaq
 using DashHtmlComponents
 using DataFrames
-using ..LinearGenotype
-using ..Expressions
-using Base64
-using PlotlyBase
+using Dates
+using Distributed
+using FileIO
+using ImageIO
+using Images
+using JSON
+using LRUCache
+using Memoize
 using Plotly
-using Cockatrice.Logging: Logger
-using Cockatrice.Logging
+using PlotlyBase
+using Printf
 using Serialization
-
 
 
 REFUSR_DEBUG = "REFUSR_DEBUG" ∈ keys(ENV) ? parse(Bool, ENV["REFUSR_DEBUG"]) : false
@@ -29,17 +29,68 @@ REFUSR_DEBUG = "REFUSR_DEBUG" ∈ keys(ENV) ? parse(Bool, ENV["REFUSR_DEBUG"]) :
 ASSET_DIR = "$(@__DIR__)/../assets"
 UI = dash(assets_folder=ASSET_DIR, suppress_callback_exceptions=!REFUSR_DEBUG)
 
+LOG_BASE = """$(ENV["HOME"])/logs/refusr"""
+
+
+# Use this to filter out bad log dirs
+# or honestly just delete them TODO
+LAST_BREAKING_LOG_FORMAT_CHANGE = nothing
+
+sanitize_log_dir(log_dir) = replace(log_dir, Regex("^$(LOG_BASE)") => "")
+
+
+function find_st_code(csv_filename)
+    st = replace(csv_filename, r"_([0-9][0-9]*|ALL)\.csv" => ".st")
+    if isfile(st)
+        return read(st, String)
+    else
+        return ""
+    end
+end
+
+
+function list_log_dirs()
+    dirs = read(`find $(LOG_BASE) -mindepth 4 -maxdepth 4 -type d`, String) |> split
+    sort!(dirs, by=mtime, rev=true)
+    sanitize_log_dir.(dirs)
+end
+
+
+function try_to_read_status(log_dir)
+    try
+        text = read("$(LOG_BASE * log_dir)/STATUS.TXT", String)
+        parts = split(text, "\n")
+        return strip(join(parts, ": "), [':', ' '])
+    catch
+        @warn "Could not read STATUS.TXT at $(log_dir)"
+        return ""
+    end
+end
+
+function make_log_dir_selection()
+    dcc_dropdown(id="log-dir-selection",
+                 placeholder="Select a log directory to explore",
+                 persistence=true,
+                 persistence_type="session",
+                 options=[(label="$(d) ($(try_to_read_status(d)))", value=d) for d in list_log_dirs()])
+end
 
 
 function initialize_server(;config,
-                           update_interval=2,
+                           update_interval=1,
                            debug=REFUSR_DEBUG,
                            background=true) 
     global UI
+    # sanitize the logging dir
+    log_dir = replace(config.logging.dir, Regex("^$(LOG_BASE)") => "")
+    @info "Sanitized the log dir" log_dir (LOG_BASE * log_dir)
+
     UI.layout = html_div() do
         html_h1("REFUSR UI", style = Dict("textAlign" => "center")),
-        html_div(id="loginfo", style = Dict("display" => "None")) do
-            config.logging.dir,
+        make_log_dir_selection(),
+        dcc_location(id="log-dir"),
+        html_div(id="modtime", style = Dict("display" => "None")) do
+            #log_dir,
             now() |> string
         end,
         dcc_interval(id="main-interval", interval=update_interval*1000),
@@ -180,33 +231,34 @@ function specimen_summary(g, title; id = "specimen-summary")
 end
 
 
+
 function disassembly(g; id="disassembly")
 
-    chromosome_disas = join(string.(g.chromosome), "\n") * "\n"
-    effective_disas = join(string.(g.effective_code), "\n") * "\n"
+    chromosome_disas = join([@sprintf("%03d.    %s", i, inst)
+                             for (i, inst) in enumerate(g.chromosome)],
+                            "\n") * "\n"
+
+    effective_disas  = join([@sprintf("%03d.    %s", i, inst)
+                             for (i, inst) in zip(g.effective_indices,
+                                                  g.effective_code)],
+                            "\n") * "\n"
+
 
     len_c = length(g.chromosome)
     len_e = length(g.effective_code)
 
-    dcc_markdown(
-        id = id,
-"""
-## Chromosome
-
-$(len_c) Instructions
-
-```{.asm}
-$(chromosome_disas)
-```
-
-## Effective Code
-
-$(len_e) Instructions ($(round(100.0 * len_e / len_c, digits=2))% of Chromosome)
-
-```{.asm}
-$(effective_disas)
-```
-""")
+    html_div(id=id, style = Dict("display" => "flex")) do
+        html_div(id="disassembly-chromosome", style = Dict("flex" => "50%")) do
+            html_h2("Chromosome"),
+            html_div("$(len_c) Instructions"),
+            html_pre(chromosome_disas)
+        end,
+        html_div(id="disassembly-effective", style = Dict("flex" => "50%")) do
+            html_h2("Effective Code"),
+            html_div("$(len_e) Instructions ($(round(100 * len_e / len_c, digits=2))%)"),
+            html_pre(effective_disas)
+        end
+    end
 end
 
 
@@ -303,9 +355,7 @@ function interaction_matrix_viewer(n; id="interaction-matrices")
     image = html_img(id="interaction-matrices-image",
                      src=url,
                      title="Interaction Matrices",
-                     width="100%")
-    #marks = Dict([Symbol(v) => Symbol(L.table.iteration_mean[v] |> ceil)
-    #              for v in Int.(ceil.(LinRange(1, length(L.im_log), 100)))])
+                     style = Dict("width" => "100%", "max-height" => "500px"))
     html_div(id=id) do
         html_h1("Interaction Matrices"),
         image,
@@ -329,7 +379,8 @@ _difficulty_ score, equal to 1 minus the frequency with which its solution appea
 existing population (i.e., `(~).(row .⊻ answer_vector) |> mean`, in Julia). An
 individual is then assigned a score equal to the sum of difficulties of the cases
 they solved correctly, divided by the total number of cases. This is the source of
-the value `fitness 1` in the fitness vector.
+the value that we have called `ingenuity` in the table above, and the primary element in
+the fitness vector.
 
 Each subpopulation, or "island", maintains its own interaction
 matrix. In the visualizations above, each row represents a test case (a set of
@@ -384,6 +435,36 @@ function decompilation_in_progress(;hidden=false)
 end
 
 
+function plot_trace_information(g;
+                                title="$(title) by Genetic Site",
+                                measure=:trace_info)
+    disas = string.(g.chromosome)
+    X = 1:length(g.chromosome)
+    Y = zeros(length(g.chromosome))
+    Y[g.effective_indices] .= g.phenotype[measure]
+    dst_registers = [inst.dst for inst in g.chromosome]
+    distinct_reg = unique(dst_registers) |> sort
+    function filter_by_reg(series, reg)
+        [(dst_registers[i] == reg ? v : 0) for (i, v) in enumerate(series)]
+    end
+    data = [(x = X,
+             y = filter_by_reg(Y, reg),
+             name = "R[$(reg)]",
+             type = "bar",
+             text = disas)
+     for reg in distinct_reg]
+    dcc_graph(
+        id = "specimen-trace-info-plot",
+        figure = (
+            data = data,
+            layout = (title = title,
+                      barmode = "group",
+                      labels = (x = 1:length(X), y = 1:length(Y))),
+        )
+    )
+end
+
+
 function specimen_report(g;
                          id="specimen-report")
     title = g.performance == 1.0 ? "Champion $(g.name)" : "Specimen $(g.name)"
@@ -395,6 +476,10 @@ function specimen_report(g;
         specimen_summary(g, title, id="specimen-summary"),
         html_hr(),
         specimen_decompilation_container(hidden=false),
+        html_hr(),
+        plot_trace_information(g, measure=:trace_info, title="Trace Information"),
+        html_hr(),
+        plot_trace_information(g, measure=:trace_hamming, title="Trace Hamming Distance"),
         html_hr(),
         disassembly(g, id="specimen-disassembly"),
         html_div(id="current-report-name", g.name, style=Dict("display" => "None"))
@@ -542,12 +627,16 @@ function generate_main_page(config)
         html_h1("Configuration for this Experiment"),
         html_pre("$(config.yaml)"),
         html_hr(),
-        html_a(href="file://$(config.logging.dir)", "Log directory: $(config.logging.dir)")
+        html_h1("Structured Text for Reverse Engineered Function"),
+        html_div("Note: this is being provided only for the user's benefit. The source code is hidden from the GP, which sees only the behaviour of the function."),
+        html_hr(),
+        html_pre("$(find_st_code(config.selection.data))"),
+        html_hr()
     end
 
     push!(content, config_txt)
 
-
+    
     html_div(id="main") do
         content
     end
@@ -581,7 +670,7 @@ end
 # way of preventing callbacks from executing if there's no new data.
 ##
 function get_logger(log_dir, mod_time=nothing)
-    path = "$(log_dir)/.L.dump"
+    path = "$(LOG_BASE * log_dir)/.L.dump"
     if !isfile(path)
         throw(PreventUpdate())
     end
@@ -601,12 +690,6 @@ end
 
 
 
-function with_logger(loginfo, method, args...)
-    log_dir, mod_time = loginfo
-    L, new_mod_time = get_logger(log_dir, mod_time)
-    loginfo_children = [log_dir, new_mod_time]
-    (method(L, args...), loginfo_children)
-end
 
 
 
@@ -614,16 +697,16 @@ callback!(
     UI,
     Output("interaction-matrices-image", "src"),
     Input("interaction-matrices-slider", "value"),
-    Input("loginfo", "children"),
-) do im_idx, loginfo
-    log_dir, _mod_time = loginfo
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
+) do im_idx, _mod_time, log_dir
     if isnothing(im_idx)
         im_idx = :last
     end
 
     try
         @debug "interaction matrix time" im_idx
-        ims = Logging.read_ims_at_step(log_dir=log_dir, step=im_idx)
+        ims = Logging.read_ims_at_step(log_dir=LOG_BASE * log_dir, step=im_idx)
         @debug "got ims" ims
         interaction_matrix_image(ims)
     catch e
@@ -636,10 +719,10 @@ end
 callback!(
     UI,
     Output("specimen-dropdown", "options"),
-    Input("loginfo", "children"),
-) do loginfo
-    log_dir, _mod_time = loginfo
-    specimen_files = Logging.list_specimen_files(log_dir)
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
+) do _mod_time, log_dir
+    specimen_files = Logging.list_specimen_files(LOG_BASE * log_dir)
     @debug "in specimen-dropdown callback, to make options" specimen_files
     if isempty(specimen_files)
         throw(PreventUpdate())
@@ -655,12 +738,11 @@ callback!(
     Output("interaction-matrices-slider", "max"),
     Output("interaction-matrices-slider", "marks"),
     Output("interaction-matrices-slider", "value"),
-    #Input("im-data-container", "children"),
-    Input("loginfo", "children"),
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
     State("interaction-matrices-slider", "value"),
-) do loginfo, _cur_val
-    log_dir, _mod_time = loginfo
-    slider_max = Logging.count_im_batches(log_dir)
+) do _mod_time, log_dir, _cur_val
+    slider_max = Logging.count_im_batches(LOG_BASE * log_dir)
     if slider_max == 0
         throw(PreventUpdate())
     end
@@ -672,14 +754,12 @@ callback!(
     UI,
     Output("specimen-report", "children"),
     Input("specimen-dropdown", "value"),
-    Input("loginfo", "children"),
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
     State("current-report-name", "children"),
-    #State("specimen-data-container", "children"),
-) do choice, loginfo, current_report_name
+) do choice, _mod_time, log_dir, current_report_name
 
     @debug "In specimen report callback " choice current_report_name
- 
-    log_dir, _mod_time = loginfo
 
     if isnothing(choice)
         throw(PreventUpdate())
@@ -690,13 +770,10 @@ callback!(
     end
 
 
-    specimen = Logging.read_specimen_file(log_dir=log_dir,
+    specimen = Logging.read_specimen_file(log_dir=LOG_BASE * log_dir,
                                           filename=choice,
                                           constructor=LinearGenotype.Creature)
 
-    #if !isempty(jar) && specimen.name == JSON.parse(jar[1])["name"]
-    #    throw(PreventUpdate())
-    #end
     @debug "Generating report for specimen $(specimen.name)"
     specimen_report(specimen) #, length(specimen_vec))
 end
@@ -707,25 +784,31 @@ callback!(
     Output("decompilation-in-progress", "hidden"),
     Output("decompilation-cache", "children"),
     Output("current-decompilation-name", "children"),
-    Input("specimen-dropdown", "value"),
+    Input("current-report-name", "children"),
+    State("log-dir", "pathname"),
+    State("specimen-dropdown", "value"),
     State("decompilation-cache", "children"),
-    State("loginfo", "children"),
     State("current-decompilation-name", "children"),
-) do choice, cache, loginfo, current_decompilation_name
+) do current_report_name, log_dir, choice, cache, current_decompilation_name
     @debug "In specimen decompilation callback " choice cache
     if isnothing(choice)
+        return [], true, cache, current_decompilation_name
+    end
+
+    if current_decompilation_name == current_report_name
         throw(PreventUpdate())
     end
 
-    if occursin(current_decompilation_name, choice)
+    
+    specimen = try
+        Logging.read_specimen_file(log_dir=LOG_BASE * log_dir,
+                                   filename=choice,
+                                   constructor=LinearGenotype.Creature)
+    catch er
+        @warn "Error reading specimen file $(filename)" er
         throw(PreventUpdate())
     end
-
-    log_dir, _mod_time = loginfo
-    specimen = Logging.read_specimen_file(log_dir=log_dir,
-                                          filename=choice,
-                                          constructor=LinearGenotype.Creature)
-
+ 
     @debug "In decompilation handler. specimen: $(specimen.name)"
     D = JSON.parse(cache)
     if specimen.name ∈ keys(D)
@@ -743,13 +826,17 @@ callback!(
     UI,
     Output("stats-dropdown-container", "children"),
     #Input("table-data-container", "children"),
-    Input("loginfo", "children"),
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
     State("stats-dropdown", "value"),
-) do loginfo, selection
-    #j = JSON.parse(blob)
-    log_dir, _mod_time = loginfo
-    names = Symbol.(split(readline("$(log_dir)/report.csv"), ","))
-    stats_dropdown(options=names, value=selection)
+) do _mod_time, log_dir, selection
+    try
+        names = Symbol.(split(readline("$(LOG_BASE * log_dir)/report.csv"), ","))
+        stats_dropdown(options=names, value=selection)
+    catch er
+        @warn "Error in stats-dropdown-container callback: $(er)\nIt's possible that the report.csv file just hasn't been generated yet, so this isn't a problem unless it's persistent."
+        throw(PreventUpdate())
+    end
 end
 # passing the current value through as a hint that this callback should be executed
 # before the one that builds the plot
@@ -759,14 +846,14 @@ callback!(
     UI,
     Output("table-container", "children"),
     Output("plot-container", "children"),
-    Input("loginfo", "children"),
+    Input("modtime", "children"),
     Input("stats-dropdown", "value"),
+    Input("log-dir", "pathname"),
     #Input("table-data-container", "children")
-) do loginfo, plot_columns #, blob
+) do _mod_time, plot_columns, log_dir
     #table = decode_table(blob)
-    log_dir, mod_time = loginfo
     try
-        table = Logging.read_table(log_dir)
+        table = Logging.read_table(LOG_BASE * log_dir)
         (generate_table(table, 10),
          plot_stat(table,
                    cols=plot_columns,
@@ -781,13 +868,13 @@ end
 
 callback!(
     UI,
-    Output("loginfo", "children"),
+    Output("modtime", "children"),
     Input("main-interval", "n_intervals"),
     Input("pause-switch", "value"),
-    State("loginfo", "children"),
-) do n_intervals, pause, loginfo
-    log_dir, mod_time = loginfo
-    stamp_path = "$(log_dir)/.L.stamp"
+    Input("log-dir", "pathname"),
+    State("modtime", "children"),
+) do n_intervals, pause, log_dir, mod_time
+    stamp_path = "$(LOG_BASE * log_dir)/.L.stamp"
     if !(isfile(stamp_path))
         throw(PreventUpdate())
     end
@@ -796,26 +883,17 @@ callback!(
     if old_mod_time == new_mod_time
         throw(PreventUpdate())
     end
-    [log_dir, string(new_mod_time)]
+    string(new_mod_time)
 end
 
-# callback!(
-#     UI,
-#     Output("data-container", "children"),
-#     Output("loginfo", "children"),
-#     Input("main-interval", "n_intervals"),
-#     Input("pause-switch", "value"),
-#     State("loginfo", "children"),
-# ) do n_intervals, pause, loginfo
-#     if pause
-#         throw(PreventUpdate())
-#     end
-#     @time with_logger(loginfo, populate_data_container)
-# end
-## Consider:
-# Things might run more smoothly if we stream data to disk, and then use callbacks
-# in the UI to dynamically read and render that data.
-##
+
+callback!(
+    UI,
+    Output("log-dir", "pathname"),
+    Input("log-dir-selection", "value"),
+) do log_dir
+    log_dir
+end
 
 end # End module
 

@@ -46,12 +46,12 @@ end
 number_of_possible_insts(n_input, n_reg; ops=OPS) = n_input * (n_input + n_reg) * length(ops)
 
 
-function number_of_possible_programs(n_input, n_reg, max_length) 
-    [number_of_possible_insts(n_input, n_reg)^BigFloat(i) for i in 1:max_length] |> sum
+function number_of_possible_programs(n_input, n_reg, max_len) 
+    [number_of_possible_insts(n_input, n_reg)^BigFloat(i) for i in 1:max_len] |> sum
 end
 
 function number_of_possible_programs(config::NamedTuple)
-    number_of_possible_programs(config.genotype.data_n, config.genotype.registers_n, config.genotype.max_length)
+    number_of_possible_programs(config.genotype.data_n, config.genotype.registers_n, config.genotype.max_len)
 end
 
 
@@ -238,7 +238,9 @@ function Creature(d::Dict)
         ph = d["phenotype"]
         results = ph["results"] |> BitArray
         trace = cat([cat(a..., dims=2) for a in ph["trace"]]..., dims=3) |> BitArray
-        (;results, trace)
+        trace_info = Float64.(ph["trace_info"])
+        trace_hamming = "trace_hamming" ∈ keys(ph) ? Float64.(ph["trace_hamming"]) : Float64[]
+        (;results, trace, trace_info, trace_hamming)
     else
         nothing
     end
@@ -273,7 +275,7 @@ end
 
 
 function Base.show(io::IO, inst::Inst)
-    op_str = inst.op |> nameof |> String
+    op_str = inst.op == identity ? "mov" : (inst.op |> nameof |> String)
     regtype(x) = x < 0 ? 'D' : 'R'
     if inst.arity == 2
         @printf(io, "%c[%02d] ← %c[%02d] %s %c[%02d]",

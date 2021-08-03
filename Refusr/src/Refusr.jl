@@ -29,7 +29,9 @@ function launch(config_path)
     config = prep_config(config_path)
     logger = Cockatrice.Logging.Logger(LOGGERS, config)
 
-    server_task = if config.dashboard.enable
+    headless = "REFUSR_HEADLESS" ∈ keys(ENV) && parse(Bool, ENV["REFUSR_HEADLESS"])
+
+    server_task = if (!headless) && config.dashboard.enable
         task = Dashboard.initialize_server(
             config=config,
             background=true,
@@ -40,7 +42,8 @@ function launch(config_path)
             print(".")
         end
         println()
-        run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)"`)
+        log_dir = Dashboard.sanitize_log_dir(config.logging.dir)
+        run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)/$(log_dir)"`)
         task
     else
         @async begin nothing end
