@@ -1,4 +1,4 @@
-experiment_duration: 1000
+experiment_duration: 50000
 step_duration: 2
 preserve_population: true
 experiment: "2MUX-without-sharing"
@@ -17,12 +17,14 @@ genotype:
   min_len: 4
   max_len: 100
   data_n: 6
+  registers_n: 4
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1
+  weight_crossover_points: true
 
 population:
-  size: [9, 9]
+  size: [10, 10]
   toroidal: true
   locality: 16
   n_elites: 10
@@ -32,3 +34,8 @@ population:
 logging:
   log_every: 1
   save_every: 50
+
+dashboard:
+  server: "0.0.0.0"
+  port: 9124
+  enable: true

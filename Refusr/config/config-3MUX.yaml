@@ -1,5 +1,5 @@
 experiment: "3-MUX_meaty-inane-flush"
-experiment_duration: 1000000
+experiment_duration: 2000000
 step_duration: 2
 preserve_population: true
 

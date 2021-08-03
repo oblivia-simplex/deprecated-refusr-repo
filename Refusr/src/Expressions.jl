@@ -2,8 +2,9 @@
 module Expressions
 
 using PyCall
+using LightGraphs
+using MetaGraphs
 using Dates
-using Graphs
 using Memoize
 using LRUCache
 using TikzPictures
@@ -605,8 +606,77 @@ function to_constraints(e::Expr, model)
     # to order-theoretic JuMP constraints. But not the thing i need to do now.
 end
 
-function expression_graph(e::Expr)
 
+function expression_graph(e)
+
+    function desc(e::Expr)
+	      if e.head === :call
+		        string(e.args[1])
+	      elseif e.head === :ref
+		        string(e)
+	      end
+    end
+
+    desc(e) = string(e)
+
+	  function builder!(G, s, prev=nothing)
+		    add_vertex!(G)
+		    s_vertex = nv(G)
+		    if prev !== nothing
+			      add_edge!(G, prev, s_vertex)
+		    end
+		    set_prop!(G, s_vertex, :label, desc(s))
+		    if s isa Expr && s.head === :call
+			      for arg in s.args[2:end]
+				        builder!(G, arg, s_vertex)
+			      end
+		    end
+	  end
+
+	  G = MetaDiGraph()
+	  builder!(G, e)
+	  G
 end
+
+
+function dotfile(io, g)
+    write(io, "digraph G {\n")
+    for p in props(g)
+        write(io, "$(p[1])=$(p[2]);\n")
+    end
+
+    for v in vertices(g)
+        write(io, "$v")
+        if length(props(g, v)) > 0
+            write(io, " [ ")
+        end
+        for p in props(g, v)
+            key = p[1]
+            write(io, "$key=\"$(p[2])\",")
+        end
+        if length(props(g, v)) > 0
+            write(io, "];")
+        end
+        write(io, "\n")
+    end
+
+    for e in edges(g)
+        write(io, "$(src(e)) -> $(dst(e)) [ ")
+        for p in props(g,e)
+            write(io, "$(p[1])=$(p[2]), ")
+        end
+        write(io, "]\n")
+    end
+    write(io, "}\n")
+    io
+end
+
+
+function expression_graph_svg(e; tool="circo")
+    tmp, io = mktemp()
+    dotfile(io, expression_graph(e)) |> close
+    read(`$(tool) -overlap=false -Tsvg $(tmp)`, String)
+end
+
 
 end # module Expressions

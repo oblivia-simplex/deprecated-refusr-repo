@@ -1,5 +1,5 @@
-experiment_duration: 500
-step_duration: 2
+experiment_duration: 50000
+step_duration: 1
 preserve_population: true
 experiment: "2MUX-with-sharing"
 
