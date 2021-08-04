@@ -67,12 +67,17 @@ function try_to_read_status(log_dir)
     end
 end
 
+
+function log_dir_options()
+    [(label="$(d) ($(try_to_read_status(d)))", value=d) for d in list_log_dirs()]
+end
+
 function make_log_dir_selection()
     dcc_dropdown(id="log-dir-selection",
                  placeholder="Select a log directory to explore",
                  persistence=true,
                  persistence_type="session",
-                 options=[(label="$(d) ($(try_to_read_status(d)))", value=d) for d in list_log_dirs()])
+                 options=log_dir_options())
 end
 
 
@@ -87,6 +92,7 @@ function initialize_server(;config,
 
     UI.layout = html_div() do
         html_h1("REFUSR UI", style = Dict("textAlign" => "center")),
+        html_h2(id="experiment-status"),
         make_log_dir_selection(),
         dcc_location(id="log-dir"),
         html_div(id="modtime", style = Dict("display" => "None")) do
@@ -868,6 +874,15 @@ end
 
 callback!(
     UI,
+    Output("experiment-status", "children"),
+    Input("modtime", "children"),
+    Input("log-dir", "pathname"),
+) do _modtime, log_dir
+    "Status: " * try_to_read_status(log_dir)
+end
+
+callback!(
+    UI,
     Output("modtime", "children"),
     Input("main-interval", "n_intervals"),
     Input("pause-switch", "value"),
@@ -890,9 +905,10 @@ end
 callback!(
     UI,
     Output("log-dir", "pathname"),
+    Output("log-dir-selection", "options"),
     Input("log-dir-selection", "value"),
 ) do log_dir
-    log_dir
+    log_dir, log_dir_options()
 end
 
 end # End module
