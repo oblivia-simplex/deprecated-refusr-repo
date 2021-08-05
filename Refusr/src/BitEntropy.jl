@@ -30,7 +30,7 @@ end
 
 "H(Y|X)"
 function conditional_entropy(Y, X)
-    t = Pr(Y, true)  * log2(Pr(Y, true))
+    t = Pr(Y, true) * log2(Pr(Y, true))
     f = Pr(Y, false) * log2(Pr(Y, false))
     -(t + f)
 end

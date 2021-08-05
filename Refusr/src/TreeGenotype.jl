@@ -58,36 +58,6 @@ function Creature(config::NamedTuple)
 end
 
 
-NONTERMINALS = [:& => 2, :| => 2, :~ => 1]
-
-
-function grow(depth, max_depth, terminals, nonterminals, bushiness)
-    nodes = [terminals; nonterminals]
-    if depth == max_depth
-        return first(rand(terminals))
-    end
-    node, arity = depth > 0 && rand() > bushiness ? rand(nodes) : rand(nonterminals)
-    if iszero(arity)
-        return node
-    end
-    args = [grow(depth + 1, max_depth, terminals, nonterminals, bushiness) for _ = 1:arity]
-    return Expr(:call, node, args...)
-end
-
-
-function grow(
-    max_depth;
-    terminals = [],
-    nonterminals = NONTERMINALS,
-    bushiness = 0.8,
-)
-    grow(0, max_depth, terminals, nonterminals, bushiness)
-end
-
-
-
-
-
 function expr_index(expr::Expr, indices...)
     e = expr.args[indices[1]]
     for i in indices[2:end]
@@ -148,13 +118,13 @@ function crossover(a::Creature, b::Creature; config = nothing)
     [child1, child2]
 end
 
-function mutate(a::Expr; config=nothing)
+function mutate(a::Expr; config = nothing)
     terminals = generate_terminals(config.genotype.data_n)
-    crossover(a, grow(depth, terminals=terminals), config=config)
+    crossover(a, grow(depth, terminals = terminals), config = config)
 end
 
 
-function mutate!(a::Expr; config=nothing)
+function mutate!(a::Expr; config = nothing)
     depth = 3
     terminals = generate_terminals(config.genotype.data_n)
     b = grow(depth, terminals = terminals)
@@ -166,7 +136,7 @@ end
 
 
 function mutate!(a::Creature; config = nothing)
-    mutate!(a.chromosome, config=config)
+    mutate!(a.chromosome, config = config)
     a
 end
 
