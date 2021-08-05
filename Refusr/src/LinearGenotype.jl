@@ -6,12 +6,12 @@ using StatsBase
 import JSON
 import Base.isequal
 
+using ..Ops
 using ..FF
 using ..Names
 using ..StructuredTextTemplate
 using ..Cockatrice.Evo
 using ..Expressions
-
 
 
 const RegType = Bool

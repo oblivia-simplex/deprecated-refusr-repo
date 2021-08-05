@@ -1,0 +1,62 @@
+* Decompilation and Simplification
+
+  In order for our results to be of any use to a subject area expert, we translate the programs that constitute our genetic representations into concise symbolic expressions. 
+  
+  We use a combination of techniques, here.
+
+  
+** Decompiling Linear Instruction Code to Symbolic Expression Trees
+   
+** Simplifying Symbolic Expression Trees
+
+*** Incremental Simplification
+
+    Since the cost of expression simplification grows exponentially (I think? verify!) with the size of the expression, and worst-case expression complexity grows rapidly (quantify this!) with the length of the instruction list, it's better to apply the simplification algorithm $n$ times to a linear instruction list of length $n$ than it is to apply it only once to an expression naively decompiled from the entire list.
+   
+**** TODO quantify these complexity claims, either empirically or, better, theoretically
+     
+*** Caching
+
+=evoL=, here, is a new, single-island population of 100 genotypes, each with a maximum code length of 100, using 6 immutable input registers, =D[1:6]= and 6 mutable scratch registers, =R[1:6]=. =R[1]= is designated as the output register -- whichever value is held by =R[1]= at the end of execution is taken as the program's return value. 
+
+By utilizing a 2-gibibyte cache with the =simplify()= function, we're able to obtain an impressive, 100x speedup when decompiling a virgin, unevolved population.
+
+    #+begin_src julia
+      julia> Expressions._use_cache(false); Expressions.flush_cache!()
+      LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+      julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), cache=false)
+      908.448 μs (3226 allocations: 281.33 KiB)
+      true
+
+      julia> Expressions._use_cache(true); Expressions.flush_cache!()
+      LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+      julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
+      8.610 μs (57 allocations: 2.39 KiB)
+      :(D[1])
+    #+end_src
+
+    Now, naive (unsimplified) expression complexity tends to increase as the population evolve (TODO: plot this!), as more or less coherent logical structure begins to crystalize in the soup of once merely random instructions. This makes the simplification algorithm increasingly costly to run. Indeed, before we implemented incremental simplification in the decompilation algorithm, simplifying genome at a late stage in the evolution would often take upwards of 30 minutes, if it didn't exhaust the memory of our workstation entirely. 
+
+    
+    Furthermore, since the population evolves through recombinatorial (and sometimes mutational) means -- even though this is at the level of linear instructions and not symbolic expressions -- we should expect common subexpressions to recur quite frequently, which makes a compelling case for caching.
+    
+#+begin_src julia
+julia> @showprogress for i in 1:1000 Step.do_step!(evoL); end
+Progress: 100%|██████████████████████████████████████████████████████| Time: 0:00:05
+
+julia> Expressions._use_cache(true); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
+  29.740 μs (200 allocations: 8.66 KiB)
+:((D[5] & (D[1] | D[6])) & (D[2] | D[3]))
+
+julia> Expressions._use_cache(false); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), cache=false)
+  109.895 ms (36699 allocations: 3.11 MiB)
+:(((D[1] | D[6]) & (D[3] | D[4])) & (D[5] | D[6]))
+#+end_src

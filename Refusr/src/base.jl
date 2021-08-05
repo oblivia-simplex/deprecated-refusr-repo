@@ -23,6 +23,7 @@ using Setfield
 using Statistics
 using Printf
 
+include("Ops.jl")
 include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
 include("Expressions.jl")
@@ -56,7 +57,13 @@ DEFAULT_CONFIG_FIELDS = [
 ]
 
 function prep_config(path)
+    proj_dir = abspath("$(@__DIR__)/../")
     config = Cockatrice.Config.parse(path, DEFAULT_CONFIG_FIELDS)
+    if !isabspath(config.selection.data)
+        full_path = "$(proj_dir)/$(config.selection.data)"
+        @assert isfile(full_path) "config.selection.data must be either an absolute path, or a relative path from the project directory"
+        config = @set config.selection.data = "$(proj_dir)/$(config.selection.data)"
+    end
     data = CSV.read(config.selection.data, DataFrame)
     data_n = ncol(data) - 1
     if data_n != config.genotype.data_n
@@ -136,7 +143,7 @@ pipinstall(package) = run(`$(PyCall.python) -m pip install $(package)`)
 
 # Debugging tools
 
-## To facilitate debugging
+## To facilitate debugging and testing
 function mkevo(config = "./config.yaml")
     config = prep_config(config)
     FF._set_data(config.selection.data)
