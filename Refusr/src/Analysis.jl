@@ -7,15 +7,13 @@ using ..Expressions
 using ..LinearGenotype
 using ..Cockatrice.Logging: Logger
 
-function make_plots(L::Logger)
-end
+function make_plots(L::Logger) end
 
 
-function IM_images(L::Logger, IM)
-end
+function IM_images(L::Logger, IM) end
 
 
-function summarize(L::Logger, g; label=g.name, decompile=true, make_pdf=false)
+function summarize(L::Logger, g; label = g.name, decompile = true, make_pdf = false)
     @info "Preparing summary of $(g.name)..."
     specimen_dir = "$(L.log_dir)/specimens"
     mkpath(specimen_dir)
@@ -36,8 +34,8 @@ function summarize(L::Logger, g; label=g.name, decompile=true, make_pdf=false)
         mkpath(img_path)
         syntax_tree_path = "$(img_path)/champion_ast.svg"
         syntax_dag_path = "$(img_path)/champion_dag.svg"
-        Expressions.save_diagram(simple, syntax_tree_path, tree=true)
-        Expressions.save_diagram(simple, syntax_dag_path, tree=false)
+        Expressions.save_diagram(simple, syntax_tree_path, tree = true)
+        Expressions.save_diagram(simple, syntax_dag_path, tree = false)
 
         """
 ## Symbolic Representation
@@ -62,7 +60,8 @@ $(simple)
         ""
     end # End of decompile conditional
 
-        header = make_pdf ? """
+    header =
+        make_pdf ? """
 ---
 title: Champion
 header-includes:

@@ -15,13 +15,14 @@ selection:
 genotype:
   max_depth: 8
   min_len: 4
-  max_len: 100
+  max_len: 200
   data_n: 6
-  registers_n: 4
+  registers_n: 5
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1
   weight_crossover_points: true
+  ops: "| & ~ mov"
 
 population:
   size: [10, 10]

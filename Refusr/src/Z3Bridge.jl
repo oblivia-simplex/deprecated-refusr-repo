@@ -23,7 +23,7 @@ mk_const_bool(b::Bool) = z3.Bool(b)
 
 
 
-mk_registers(prefix, num) = [mk_var_bool(prefix, i) for i in 1:num]
+mk_registers(prefix, num) = [mk_var_bool(prefix, i) for i = 1:num]
 
 
 R = mk_registers("R", 64)
@@ -85,7 +85,7 @@ end
 
 
 function simplify(e::Expr)
-    z3.simplify(expr_to_z3(e), flat=false) |> z3_to_expr
+    z3.simplify(expr_to_z3(e), flat = false) |> z3_to_expr
 end
 
 simplify(x) = x

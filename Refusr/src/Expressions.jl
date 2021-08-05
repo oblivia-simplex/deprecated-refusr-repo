@@ -12,25 +12,28 @@ using TreeView
 using DataFrames
 using StatsBase
 using FunctionWrappers: FunctionWrapper
+#using SymPy
 using Espresso # Espresso actually implements some of the features
 # we already have here, but I think my implementation is faster.
 # It does seem much better for simplification, though. 
 
-export replace!, replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
+export replace!,
+    replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
 
 
 sympy = pyimport("sympy")
+
 
 function __init__()
     copy!(sympy, pyimport("sympy"))
 end
 
 
-nand(a,b) = ~(a & b)
+nand(a, b) = ~(a & b)
 
 (⊃)(a, b) = (~a) | b
 
-function Base.replace!(e::Expr, p::Pair; all=true)
+function Base.replace!(e::Expr, p::Pair; all = true)
     old, new = p
     oldpred = old isa Function ? old : x -> typeof(x) == typeof(old) && x == old
     mknew = new isa Function ? new : _ -> deepcopy(new)
@@ -43,18 +46,18 @@ function Base.replace!(e::Expr, p::Pair; all=true)
             e.args[i] = mknew(e.args[i])
             all || return e
         elseif e.args[i] isa Expr
-            Base.replace!(e.args[i], oldpred=>mknew, all=all)
+            Base.replace!(e.args[i], oldpred => mknew, all = all)
         end
     end
     return e
 end
 
 
-function Base.replace(e::Expr, p::Pair; all=true)
-    Base.replace!(deepcopy(e), p, all=all)
+function Base.replace(e::Expr, p::Pair; all = true)
+    Base.replace!(deepcopy(e), p, all = all)
 end
 
-function replace_atom(e, p::Pair; all=true)
+function replace_atom(e, p::Pair; all = true)
     old, new = p
     oldpred = old isa Function ? old : x -> typeof(x) == typeof(old) && x == old
     mknew = new isa Function ? new : _ -> deepcopy(new)
@@ -66,8 +69,8 @@ function replace_atom(e, p::Pair; all=true)
 end
 
 
-Base.replace(s::Symbol, p::Pair; all=true) = replace_atom(s, p, all=all)
-Base.replace(s::Bool, p::Pair; all=true) = replace_atom(s, p, all=all)
+Base.replace(s::Symbol, p::Pair; all = true) = replace_atom(s, p, all = all)
+Base.replace(s::Bool, p::Pair; all = true) = replace_atom(s, p, all = all)
 
 
 
@@ -119,7 +122,7 @@ function validate_path!(path::Vector, table::Dict)
 end
 
 
-function random_subexpr(e::Expr; maxdepth=8)
+function random_subexpr(e::Expr; maxdepth = 8)
     table = filter(x -> length(x) <= maxdepth, enumerate_expr(e))
     if isempty(table)
         return [], e
@@ -135,14 +138,14 @@ end
 function prune!(e::Expr, depth, terminals)
     isterminal(e) && return
     if depth <= 1
-        for i in 2:length(e.args)
+        for i = 2:length(e.args)
             if e.args[i] isa Expr
                 e.args[i] = rand(terminals).first
             end
         end
     else
         for arg in e.args[2:end]
-            prune!(arg, depth-1, terminals)
+            prune!(arg, depth - 1, terminals)
         end
     end
 end
@@ -156,34 +159,40 @@ prune!(e, depth, terminals) = nothing
 # Rewriting rules
 
 
-@simple_rule identity(x)      x
-@simple_rule ~~x              x
-@simple_rule (false & x)      false
-@simple_rule (x & false)      false
-@simple_rule (true | x)       true
-@simple_rule (x | true)       true
-@simple_rule (false | x)      x
-@simple_rule (x | false)      x
-@simple_rule (true & x)       x
-@simple_rule (x & true)       x
-@simple_rule ~(x & y)         (~x | ~y)
-@simple_rule ~(x | y)         (~x & ~y)
-@simple_rule (x | x)          x
-@simple_rule (x & x)          x
-@simple_rule (x ⊻ x)          false
-@simple_rule ((x ⊻ y) ⊻ x)    y
+@simple_rule identity(x) x
+@simple_rule ~~x x
+@simple_rule (false & x) false
+@simple_rule (x & false) false
+@simple_rule (true | x) true
+@simple_rule (x | true) true
+@simple_rule (false | x) x
+@simple_rule (x | false) x
+@simple_rule (true & x) x
+@simple_rule (x & true) x
+@simple_rule ~(x & y) (~x | ~y)
+@simple_rule ~(x | y) (~x & ~y)
+@simple_rule (x | x) x
+@simple_rule (x & x) x
+@simple_rule (x ⊻ x) false
+@simple_rule ((x ⊻ y) ⊻ x) y
 
 
 
 _simplify(e) = Espresso.simplify(e)
 
-function symbols(v::Vector{String})
+# function make_symbols_(v::Vector{String})
+#     if isempty(v)
+#         Sym[]
+#     else
+#         SymPy.symbols(join(v, " ")) # Can we assume Bool?
+#     end
+# end
+
+function make_symbols(v::Vector{String})
     if isempty(v)
         PyObject[]
-    elseif length(v) == 1
-        [sympy.symbols(v[1])]
     else
-        sympy.symbols(join(v, " ")) |> collect
+        PyObject[s for s in sympy.symbols(join(v, " "))]
     end
 end
 
@@ -220,9 +229,12 @@ demangle_helper(s) = s
 simplify(b::Bool) = b
 simplify(s::Symbol) = s
 
-Cache() = LRU{Expr, Union{Bool, Expr, Symbol}}(maxsize=2^30, by=Base.summarysize)
+Cache() = LRU{Expr,Union{Bool,Expr,Symbol}}(maxsize = 2^30, by = Base.summarysize)
 
-DiagramCache() = LRU{Tuple{Expr, Bool, Symbol}, Union{String, Vector{UInt8}}}(maxsize=2^30, by=Base.summarysize)
+DiagramCache() = LRU{Tuple{Expr,Bool,Symbol},Union{String,Vector{UInt8}}}(
+    maxsize = 2^30,
+    by = Base.summarysize,
+)
 
 USE_CACHE = true
 
@@ -232,63 +244,80 @@ function _use_cache(b::Bool)
 end
 
 
- 
-percent(a,b) = "$(round(100*a/b, digits=2))%"
+JULIA_SYMPY_TRANS =
+    [(:true => :True), (:false => :False), (:| => :∨), (:& => :∧), (:~ => :¬), (:⊻ => :Xor)]
 
-const __simplify = let CACHE = Cache(),
-    hits = 0,
-    queries = 0,
-    cache_time = 0
-function simplify_(e::Expr)::Union{Bool, Expr, Symbol}
+function julia_to_sympy!(ee)
+    for (j, s) in JULIA_SYMPY_TRANS
+        replace!(ee, j => s)
+    end
+    return ee
+end
 
-    function check_cache(e)
-        if USE_CACHE
-            start_at = now()
-            queries > 0 && @debug "Cache stats" hits queries percent(hits, queries) CACHE.currentsize percent(CACHE.currentsize, CACHE.maxsize) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
-            try
-                result = CACHE[e]
-                hits += 1
-                queries += 1
-                cache_time += (now() - start_at).value
-                return result
-            catch KeyError
-                queries += 1
-                cache_time += (now() - start_at).value
-                return nothing
+function sympy_to_julia!(ee)
+    for (j, s) in JULIA_SYMPY_TRANS
+        replace!(ee, s => j)
+    end
+    return ee
+end
+
+percent(a, b) = "$(round(100*a/b, digits=2))%"
+
+const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
+    function simplify_(e::Expr)::Union{Bool,Expr,Symbol}
+
+        function check_cache(e)
+            if USE_CACHE
+                start_at = now()
+                queries > 0 &&
+                    @debug "Cache stats" hits queries percent(hits, queries) CACHE.currentsize percent(
+                        CACHE.currentsize,
+                        CACHE.maxsize,
+                    ) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+                try
+                    result = CACHE[e]
+                    hits += 1
+                    queries += 1
+                    cache_time += (now() - start_at).value
+                    return result
+                catch KeyError
+                    queries += 1
+                    cache_time += (now() - start_at).value
+                    return nothing
+                end
             end
         end
-    end
 
-    function cache(e, result)
-        if USE_CACHE
-            start_at = now()
-            CACHE[e] = result
-            cache_time += (now() - start_at).value
+        function cache(e, result)
+            if USE_CACHE
+                start_at = now()
+                CACHE[e] = result
+                cache_time += (now() - start_at).value
+            end
         end
+
+        res = check_cache(e)
+        !isnothing(res) && return res
+
+
+        Rn = variables_used_upper_bound(e, :R)
+        Dn = variables_used_upper_bound(e, :D)
+
+        D = ["D$(i)" for i = 1:Dn] |> make_symbols
+        R = ["R$(i)" for i = 1:Rn] |> make_symbols
+        #x = evalwith(julia_to_sympy!(deepcopy(e)), D=D, R=R)
+        x = evalwith(e, D = D, R = R)
+        #p = SymPy.simplify(x)
+        p = sympy.simplify(x)
+        # FIXME
+        #s = string(p)
+        s = Meta.parse(p.__repr__())
+        simple = demangle_helper(s)
+        @debug "Simplified\n$(e)\nwith $(count_subexpressions(e)) subexpressions, to:\n$(simple)\nwith $(count_subexpressions(simple))..."
+        cache(e, simple)
+
+        return simple
     end
-
-    res = check_cache(e)
-    !isnothing(res) && return res
-
-
-    Rn = variables_used_upper_bound(e, :R)
-    Dn = variables_used_upper_bound(e, :D)
-    
-    str(v) = "$(v.args[1])$(v.args[2])"
-    D = ["D$(i)" for i in 1:Dn] |> symbols
-    R = ["R$(i)" for i in 1:Rn] |> symbols
-    x = evalwith(e, D=D, R=R)
-    p = sympy.simplify(x)
-    s = Meta.parse(p.__repr__())
-    simple = demangle_helper(s)
-    if simple isa Expr
-        replace!(simple, :^ => :⊻)
-    end
-    @debug "Simplified\n$(e)\nwith $(count_subexpressions(e)) subexpressions, to:\n$(simple)\nwith $(count_subexpressions(simple))..."
-    cache(e, simple)
-
-    return simple
-end
 end # end closure
 
 simplify(e::Expr) = __simplify(e)
@@ -297,14 +326,14 @@ simplify(e::Expr) = __simplify(e)
 flush_cache!() = empty!(__simplify.CACHE)
 
 
-function evalwith(g; D, R=[])
+function evalwith(g; D, R = [])
     eval(quote
-         let D = $D
-         let R = $R
-         return $g
-         end
-         end
-         end)
+        let D = $D
+            let R = $R
+                return $g
+            end
+        end
+    end)
 end
 
 
@@ -340,11 +369,11 @@ end
 variables_used!(acc, literal::Bool) = nothing
 
 @inline function variables_used(expr)
-#    acc = []
-#    variables_used!(acc, expr)
-#    sort!(acc, by = s -> s.args[2])
-#    unique!(acc)
-#    acc
+    #    acc = []
+    #    variables_used!(acc, expr)
+    #    sort!(acc, by = s -> s.args[2])
+    #    unique!(acc)
+    #    acc
     Espresso.find_vars(expr)
 end
 
@@ -364,7 +393,7 @@ function compile_expression(expr::Expr)
 end
 
 
-function variables_used_upper_bound(expr, letter=:D)
+function variables_used_upper_bound(expr, letter = :D)
     v = [a.args[2] for a in variables_used(expr) if a.args[1] == letter]
     isempty(v) ? 0 : maximum(v)
 end
@@ -423,7 +452,7 @@ using ..Expressions: bits
 function mux(ctrl_bits; vars = nothing, shuffle = true)
     num_inputs = 2^ctrl_bits
     needed = num_inputs + ctrl_bits
-    vars = isnothing(vars) ? [:(D[$i]) for i in 1:needed] : vars
+    vars = isnothing(vars) ? [:(D[$i]) for i = 1:needed] : vars
     @assert length(vars) ≥ needed "At least $(needed) vars are needed"
     wires = shuffle ? sort(vars, by = _ -> rand()) : vars
     controls = wires[1:ctrl_bits]
@@ -431,12 +460,13 @@ function mux(ctrl_bits; vars = nothing, shuffle = true)
     m = foldl(
         (a, b) -> :($a & $b),
         map(0:(num_inputs-1)) do i
-        switches = bits(i, ctrl_bits)
-        antecedent = foldl((a, b) -> :($a & $b), map(zip(switches, controls)) do (s, c)
-                           s == 0 ? :(~ $c) : c
-                           end)
-        consequent = input[i+1]
-        :(~($antecedent) | $consequent) # Material Conditional
+            switches = bits(i, ctrl_bits)
+            antecedent =
+                foldl((a, b) -> :($a & $b), map(zip(switches, controls)) do (s, c)
+                    s == 0 ? :(~$c) : c
+                end)
+            consequent = input[i+1]
+            :(~($antecedent) | $consequent) # Material Conditional
         end,
     )
     return m, controls, input
@@ -478,7 +508,7 @@ function structured_text_expr(terminal::Bool)
 end
 
 
-function structured_text(expr; config=nothing, comment = "")
+function structured_text(expr; config = nothing, comment = "")
     if isnothing(config)
         inputsize = variables_used_upper_bound(expr)
     else
@@ -494,13 +524,7 @@ end
 
 
 
-function generate_files(
-    sexp;
-    name = nothing,
-    comment = "",
-    dir = ".",
-    samplesize = 10000,
-)
+function generate_files(sexp; name = nothing, comment = "", dir = ".", samplesize = 10000)
 
     if isnothing(name)
         name = "RND-EXPR_" * Names.rand_name(3)
@@ -556,7 +580,7 @@ end
 
 subscript(ref::Expr) = "$(ref.args[1])_{$(ref.args[2])}"
 
-function save_diagram(e::Expr, path; tree=true)
+function save_diagram(e::Expr, path; tree = true)
     s = replace(e, (x -> x isa Expr && x.head == :ref) => (x -> Symbol(string(x))))
     if s isa Expr && s.head == :call
         Expressions.replace!(s, :~ => :NOT)
@@ -580,23 +604,23 @@ function save_diagram(e::Expr, path; tree=true)
 end
 
 
-@memoize DiagramCache function diagram(e::Expr; tree=true, format=:svg)
+@memoize DiagramCache function diagram(e::Expr; tree = true, format = :svg)
     tmp = read(`mktemp /tmp/XXXXX.$(format)`, String) |> strip
     Base.rm(tmp) # to suppress warnings
-    save_diagram(e, tmp, tree=tree)
+    save_diagram(e, tmp, tree = tree)
     dia = read(tmp, String)
     Base.rm(tmp)
     return dia
 end
 
 
-function diagram(sym::Symbol; tree=true, format=:svg)
-    diagram(Expr(sym), tree=tree, format=format)
+function diagram(sym::Symbol; tree = true, format = :svg)
+    diagram(Expr(sym), tree = tree, format = format)
 end
 
 
-function diagram(val; tree=true, format=:svg)
-    diagram(Expr(Symbol(val)), tree=tree, format=format)
+function diagram(val; tree = true, format = :svg)
+    diagram(Expr(Symbol(val)), tree = tree, format = format)
 end
 
 
@@ -610,32 +634,32 @@ end
 function expression_graph(e)
 
     function desc(e::Expr)
-	      if e.head === :call
-		        string(e.args[1])
-	      elseif e.head === :ref
-		        string(e)
-	      end
+        if e.head === :call
+            string(e.args[1])
+        elseif e.head === :ref
+            string(e)
+        end
     end
 
     desc(e) = string(e)
 
-	  function builder!(G, s, prev=nothing)
-		    add_vertex!(G)
-		    s_vertex = nv(G)
-		    if prev !== nothing
-			      add_edge!(G, prev, s_vertex)
-		    end
-		    set_prop!(G, s_vertex, :label, desc(s))
-		    if s isa Expr && s.head === :call
-			      for arg in s.args[2:end]
-				        builder!(G, arg, s_vertex)
-			      end
-		    end
-	  end
+    function builder!(G, s, prev = nothing)
+        add_vertex!(G)
+        s_vertex = nv(G)
+        if prev !== nothing
+            add_edge!(G, prev, s_vertex)
+        end
+        set_prop!(G, s_vertex, :label, desc(s))
+        if s isa Expr && s.head === :call
+            for arg in s.args[2:end]
+                builder!(G, arg, s_vertex)
+            end
+        end
+    end
 
-	  G = MetaDiGraph()
-	  builder!(G, e)
-	  G
+    G = MetaDiGraph()
+    builder!(G, e)
+    G
 end
 
 
@@ -662,7 +686,7 @@ function dotfile(io, g)
 
     for e in edges(g)
         write(io, "$(src(e)) -> $(dst(e)) [ ")
-        for p in props(g,e)
+        for p in props(g, e)
             write(io, "$(p[1])=$(p[2]), ")
         end
         write(io, "]\n")
@@ -672,11 +696,48 @@ function dotfile(io, g)
 end
 
 
-function expression_graph_svg(e; tool="circo")
+function expression_graph_svg(e; tool = "circo")
     tmp, io = mktemp()
     dotfile(io, expression_graph(e)) |> close
     read(`$(tool) -overlap=false -Tsvg $(tmp)`, String)
 end
+
+
+
+
+
+DEFAULT_NONTERMINALS = [:& => 2, :| => 2, :~ => 1]
+
+
+function grow(depth, max_depth, terminals, nonterminals, bushiness)
+    ops = [terminals; nonterminals]
+    if depth == max_depth
+        return first(rand(terminals))
+    end
+    op, arity = if depth > 0 && rand() > bushiness
+        Symbol(rand(ops))
+    else
+        rand(nonterminals)
+    end
+    if iszero(arity)
+        return op
+    end
+    args = [grow(depth + 1, max_depth, terminals, nonterminals, bushiness) for _ = 1:arity]
+    return Expr(:call, op, args...)
+end
+
+
+function grow(
+    max_depth;
+    terminals = [],
+    nonterminals = DEFAULT_NONTERMINALS,
+    bushiness = 0.8,
+)
+    grow(0, max_depth, terminals, nonterminals, bushiness)
+end
+
+
+
 
 
 end # module Expressions

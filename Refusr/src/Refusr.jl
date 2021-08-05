@@ -5,13 +5,13 @@ using Distributed
 __precompile__(false) # Precompilation is causing the system to OOM!
 
 #Base.Experimental.@optlevel 3
- 
+
 @show CORES = "REFUSR_PROCS" ∈ keys(ENV) ? parse(Int, ENV["REFUSR_PROCS"]) : 1
- 
+
 EXEFLAGS = "--project=$(Base.active_project())"
- 
+
 if CORES > nprocs()
-    addprocs(CORES, topology=:master_worker, exeflags = EXEFLAGS)
+    addprocs(CORES, topology = :master_worker, exeflags = EXEFLAGS)
 end
 
 
@@ -32,10 +32,7 @@ function launch(config_path)
     headless = "REFUSR_HEADLESS" ∈ keys(ENV) && parse(Bool, ENV["REFUSR_HEADLESS"])
 
     server_task = if (!headless) && config.dashboard.enable
-        task = Dashboard.initialize_server(
-            config=config,
-            background=true,
-        )
+        task = Dashboard.initialize_server(config = config, background = true)
         println("Waiting for server...")
         while !Dashboard.check_server(config)
             sleep(1)
@@ -43,35 +40,41 @@ function launch(config_path)
         end
         println()
         log_dir = Dashboard.sanitize_log_dir(config.logging.dir)
-        run(`xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)/$(log_dir)"`)
+        run(
+            `xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)/$(log_dir)"`,
+        )
         task
     else
-        @async begin nothing end
+        @async begin
+            nothing
+        end
     end
 
     fitness_function = FF.fit #Meta.parse("FF.$(config.selection.fitness_function)") |> eval
     #@assert fitness_function isa Function
 
     WORKERS = workers()
-    
-    params = [:config => config,
-              :fitness => fitness_function,
-              :creature_type => LinearGenotype.Creature,
-              :crossover => LinearGenotype.crossover,
-              :mutate => LinearGenotype.mutate!,
-              :tracers => TRACERS,
-              :loggers => LOGGERS,
-              :stopping_condition => stopping_condition,
-              :objective_performance => objective_performance,
-              :WORKERS => WORKERS,
-              :callback => L -> begin
-              @info "[$(L.table.iteration_mean[end])] mean performance: $(L.table.objective_meanfinite[end])\t best performance: $(L.table.objective_maximum[end])"
-              end,
-              :LOGGER => logger,
-              ]
+
+    params = [
+        :config => config,
+        :fitness => fitness_function,
+        :creature_type => LinearGenotype.Creature,
+        :crossover => LinearGenotype.crossover,
+        :mutate => LinearGenotype.mutate!,
+        :tracers => TRACERS,
+        :loggers => LOGGERS,
+        :stopping_condition => stopping_condition,
+        :objective_performance => objective_performance,
+        :WORKERS => WORKERS,
+        :callback =>
+            L -> begin
+                @info "[$(L.table.iteration_mean[end])] mean performance: $(L.table.objective_meanfinite[end])\t best performance: $(L.table.objective_maximum[end])"
+            end,
+        :LOGGER => logger,
+    ]
     # TODO: rename some of these logger vars
     started_at = now()
-    world, logger = Cosmos.run(;params...)
+    world, logger = Cosmos.run(; params...)
     finished_at = now()
     @info "Time spent in main GP loop, including initialization: $(finished_at - started_at)"
     #Distributed.rmprocs(WORKERS...)
@@ -83,7 +86,7 @@ function launch(config_path)
         end
     end
     elites = [w.elites[1] for w in world]
-    champion = sort(elites, by=objective_performance)[end]
+    champion = sort(elites, by = objective_performance)[end]
     push!(logger.specimens, champion)
     @info "Sending data on champion to dashboard" Dashboard.check_server(config)
     Cockatrice.Logging.dump_logger(logger)
@@ -97,7 +100,7 @@ function launch(config_path)
     #     end
     # end
     wait(server_task)
-    return (world=world, logger=logger, champion=champion)
+    return (world = world, logger = logger, champion = champion)
 end
 
 
