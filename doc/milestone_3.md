@@ -43,13 +43,32 @@ Based on a preliminary literature review, we identified as state-of-the-art the 
 
 The algorithm as developed and described in the source paper could only test the junta property of a given order. That is, the junta predicate checking algorithm took the number of input bits _k_ as a parameter and could only reply with an acceptance or probabilistic rejection of a junta of that order.
 
-By identifying the state that could be shared across iterations as the partial list of 
+By identifying the state that should be shared across iterations as the partial list of input bits with a proven influence on the output at some point in the input space, we were able to modify the algorith to share this state across searches of increasing junta order and thus to automatically identify the junta order and also to explicitly indicate the set of inputs in the junta.
 
 ### Preliminary Benchmarks
 
+We evaluated the performance of the junta checker on artificial test cases designed to both stress the worst-case scaling behavior of the algorithm as input space increases and to evaluate a hypothesis about the characteristics of the search space that might prove challenging at a fixed junta order.
+
+We designed two artificial function families with a fixed junta order, and ran experiments with increasing total input space size, so that the junta-forming inputs would grow more and more sparse among all the nominal inputs, a behavior that is a worst-case instance of a pattern that is expected to be common in naturally occurring functions with significant control flow, where, because of clipping of the output behavior at boundaries established by conditionals, most of the input bits associated with such inputs will yield values at conditional expressions that do not influence branches taken, and thus do not influence the outputs. Within this class, we posited a “hard” function and an “easy” function, where the easy one was constructed as a XOR of a subset of 9  of the inputs, and hard one was the same function but also constructed to be constant on a different 3 bit subplane of the inputs, with the intent of depriving the algorithm of variability information on a significant part of the input space by masking the variability in the XORed inputs. Nonetheless, the expectations reflected in the names did not obtain, and the so-called hard function took less time to solve than the so-called easy one, as if it had about 2 fewer bits in the input space. This suggests that the query complexity of the tester has a stricter dependency on the number of bits influencing the output than expected, regardless of dependencies among bits in the input space with respect to determining the output. This informed the development of distribution modeling techniques that can either represent or ignore such dependencies (see below).
+
+In either case, the scaling appeared at least exponential in the size of the input space, reflecting the search over power sets of decreasing sets of the inputs taking place in the algorithm. We ran experiments from 9 to 20 bits in the input space, and obtained the results depicted below.
+
+![](https://i.imgur.com/fFv77Sl.png)
+
+
 ## Distribution Modeling
 
+The adaptive junta checker requires the input distribution that samples are drawn from for checking to be specified, and ensuring that this distribution approximates the empirical distribution of inputs to the function under consideration concentrates the tester's efforts in regions of the input space most likely to be encountered in practice and thus ensures the results of checking are biased as much as possible toward inputs of practical interest.
+
+To that end, we developed three methods of specifying the input distribution. The first uses a fixed, symmetric beta distribution between zero and one for each bit, which plays the role of an uninformative prior that is slightly biased toward bit vectors of an equal number of one and zero bits.
+
+Two other data-adaptive methods were also developed. The second is based on iteratively increasing clustering with k-means and builds a mixture model of the empirical distribution. It is capable of learning, representing, and yielding samples from a multimodal distribution, and inference is reasonably efficient since, like the junta tester itself, it was developed to share state between models when testing a model of different dimension. It was found to be able to exactly identify the canonical basis for the three dimensional binary space from much higher dimensional data.
+
+The third method fits a vector of Bernoulli random variables to the data, and permits smoothing of the distribution. It thus cannot represent higher-order dependencies among variables or multiple modes, but is simple, fast, and by being less biased away from uniform can serve an intermediate role between the uninformative prior and the mixture model.
+
 ### Towards General Property Testing
+
+Briefly, finding a junta is a useful preprocessing step for focusing sampling for testing other properties only on inputs which are capable of influencing the output of a function under scrutiny. We are moving on to develop more general property testing according to the framework in Chapter 6 of Oded Goldreich, _Introduction to Property Testing,_ 2021 that builds on the junta tester.
 
 # The Cockatrice GP Framework and the REFUSR System (In Progress)
 
@@ -57,24 +76,97 @@ By identifying the state that could be shared across iterations as the partial l
 
 `Cockatrice.jl` is a general genetic programming (GP) framework that are developing for use in the REFUSR project (and its sister project, ROPER, which was partially developed under the AIMEE contract, but which falls outside the scope of ReMath). What Cockatrice provides in this case is a multiprocessing system that takes care of the basic evolutionary search architecture: a collection of geographically structured "island" populations are maintained, abstracting away from the details of individual genotypes, their phenotypic expression, and fitness functions, and tournament selection is scheduled and dispatched. 
 
-
-## Geography
-
-In this particular example, for the sake of simplicity, we'll look at a single island (and single process) evolution. Each island can be structured as the surface of an n-dimensional torus, but we'll stick to two dimensions here. When a tournament is arranged, Cockatrice begins by chosing a random point on the island, and then randomly selects competitors from the neighbourhood of that point. The closer an individual is to the point in question, the more likely their participation in that tournament becomes. The steepness of the distribution curve around that point can be adjusted by tweaking the `locality` parameter in the system's configuration file.
-
-<img src="https://i.imgur.com/DKBaDbn.png" width="100%" alt="Geographically constrained tournament delegation weights, on a 2-dimensional toroidal geometry">
+## Design Decisions
 
 
-![Five samples of tournament batches](https://i.imgur.com/lIHvtIk.jpg)
 
-## Linear Genetic Programming in REFUSR
+
+
+
+### Linear Genetic Programming in REFUSR
 
 When designing the GP system used in REFUSR, itself, we first considered using a tree-based form of GP, in the tradition of John Koza, where each individual genotype is represented as an abstract syntax tree or symbolic expression. The idea here was that since we're ultimately looking to evolve program specifications (constrained by problem sets and inferred properties), it would be nice if our genotype representation was _already_ "human readable", or expressible as a clear algebraic expression.
 
-This brought us up against certain obstacles in memory and runtime efficiency, however, so we opted for Banzhaf-style linear GP instead, where programs are represented as a sequence of imperative instructions for a virtual register transfer machine -- something resembling an assembly language for a simple architecture. For the time being we're doing without jumps and conditionals, though those could be implemented at a later time. So long as neither jumps nor conditionals are used, however, we can easily translate between linear/imperative and symbolic/functional expressions of programs in our population, and enjoy the advantages of both. It is simpler, on the one hand, to define random generation, sexual recombination (crossover), and mutation for linear programs than it is for syntax trees. On the other hand, it's much easier to apply expression simplification algorithms to syntax trees, and to translate them into systems of constraints for an SMT solver like Z3. Code like the following is sufficient, in fact.
+This brought us up against certain obstacles in memory and runtime efficiency, however, so we opted for Banzhaf-style linear GP instead, where programs are represented as a sequence of imperative instructions for a virtual register transfer machine -- something resembling an assembly language for a simple architecture. 
+
+A **linear program** is a vector of **register transfer instructions**, which in the context of this report we will simply call "instructions". Each instruction is a structure with three degrees of freedom: 
+
+1. choice of source register
+2. choice of destination register
+3. choice of operator
+
+When an instruction is executed on the VM, the operands are fetched from the registers -- from the source register, if the operator takes just one argument, or from the source and destination registers, if the operator takes two. The result of applying the operator to these arguments is then stored in the destination register.
+
+In the context of this report, the term **genotype**, unless otherwise specified, will refer to just these linear programs.
+
+For the time being we're doing without jumps and conditionals. This both eases the translation between linear programs and symbolic expressions, and allows us to execute programs in a massively parallel fashion. Rather than evaluating a function of type $f: \mathbb{B}^n \rightarrow \mathbb{B}^1$ for each of $m$ test cases, we can vectoralize our instruction set and evaluate a function of type $f: \mathbb{B}^{mn} \rightarrow \mathbb{B}^m$, sweeping over every test case at once. 
+
+Crucially, every linear program of jump-free register transfer instructions will eventually halt -- indeed, a program of length $\ell$ will halt after exactly $\ell$ steps. 
+
+It should be noted that _every concatenation of register transfer instructions_ constitutes a valid linear program. The only restriction we impose is on length, for which we set an upper bound, configurable for each experiment, in order to guard against the exhaustion of computational resources.
+
+#### The Probability Distribution of Linear Programs
+
+The set of linear programs under length $\ell$ is easy to sample from with uniform probability. The distribution of instructions, $\mathbb{INST}$, is just the product of the three independent distributions of available source registers, destination registers, and operators.
+
+$$\mathbb{INST} = \mathbb{SRC} \times \mathbb{DST} \times \mathbb{OP}$$
+
+The distribution of programs of length $\ell$, similarly, is just 
+
+$$\mathbb{INST}^\ell = \mathbb{INST}_1 \times \mathbb{INST}_2 \times \dots \times \mathbb{INST}_\ell$$
+
+To sample uniformly from the space of possible programs of length $\ell$, all that needs to be done is to independently select $\ell$ instructions -- much in the same way that to sample uniformly from the set of 64-bit integers it is sufficient to flip a fair coin 64 times.
 
 
-~~~~{.julia}
+
+### An Argument for Immutable Input Registers and Mutable Scratch Registers
+
+By **machine state**, here, we will mean only the register vector, as this is the only struture in the VM that our instructions are able to influence. The program counter increments inexorably with each instruction's execution, since there are no jumps, so we can ignore it in the following discussion.
+
+Before each program is executed, the virtual machine is initialized by setting all registers to zero, except for a subset of **input registers**, $D$, which are loaded with the input values for a given test case. Between initialization and termination, nothing but the program itself is allowed to influence the machine state.
+
+Linear programs, as understood in this context, are deterministic. The effect of an instruction is uniquely determined by the machine state.
+
+Consider the quantity of information, or entropy, contained in the machine state after initialization. With the execution of any given instruction, one of two things can happen: either the entropy level decreases or it remains constant. There is no way for entropy to increase.
+
+
+
+| Information Preserving | Information Destroying | Depends on Context |
+| -------- | -------- |-----|
+| `R[1] := R[1] & true` | `R[1] := R[1] & false`     | `R[1] := R[1] & R[2]`|
+| `R[1] := R[1] \| false` | `R[1] := R[1] \| true` | `R[1] := R[1] \| R[2]` |
+| `R[1] := ~R[1]` | `R[1] := R[1] xor R[1]` | `R[1] := R[1] xor R[2]` |
+
+
+Under these conditions, as program length increases, so does the probability that that program computes a constant function. So long as there is _some_ probability of encountering information-destroying instructions and instruction combinations, the loss of information will accumulate, bit by bit, until the output of the program in no way depends on input.
+
+And since programs reproduce by division and concatenation, if a subsegment of a program is information-destroying, that loss will be inherited by its offspring.
+
+Forcing the input registers to be _immutable_ by removing them from the set of possible destination registers acts as a guard rail against information loss, and it ensures that any program whatsover can be rehabitated by an appropriate suffix. This is a simple way to protect the population's computational resources.
+
+In our implementation, the input registers $D$ are immutable -- they can be chosen as an instruction's source register but never destination -- while a set of mutable scratch registers, $R$, are allowed act as both source and destination.
+
+
+
+### Decompilation and Simplification
+
+
+In order for our results to be of any use to a subject area expert, we translate the programs that constitute our genetic representations into concise symbolic expressions (the absence of jumps and conditionals greatly simplifies this process as well).
+
+
+REFUSR's linear genotypes are composed of a series of primitive register transfer instructions. They resemble assembly code for a simple virtual machine.
+
+~~~{.asm}
+TODO: example, use a 4-to-1 mux champion, and then show the
+decompiled expression as well.
+~~~
+
+Internally, each instruction is defined as a Julia `struct`, with fields for the source and destination register, the operator (a function), and that operator's arity. (Though we're currently not using any, since they invariably destroy execution information and inhibit evolutionary search, constants can be defined as nullary functions in this fashion, by setting the arity field to zero, and the operator field to `() -> true` or `() -> false`.)
+
+We can translate each instruction to a simple symbolic expression -- indeed, a member of the Julia `Expr` type -- that expresses an assignment. 
+
+~~~{.julia}
+
 function to_expr(inst::Inst)
     op = nameof(inst.op)
     dst = :(R[$(inst.dst)])
@@ -89,26 +181,173 @@ function to_expr(inst::Inst)
         :($dst = $(inst.op()))
     end
 end
+~~~
 
-DEFAULT_EXPR = :(R[1] = false)
 
-function to_expr(code::Vector{Inst})
+A sequence of instructions can then be composed into a single assignment expression by performing a series of subexpression replacements, while iterating backwards through the instruction sequence. Whenever we encounter an assignment of the form `lhs := rhs`, we simply replace all occurrences of the subexpression `lhs` with the expression `rhs` in our accumulated expression. 
+
+When the iteration is complete, we are left with a cumulative assignment instruction, which has the output register (`R[1]`) on the left-hand side, and the compound expression, generated through successive replacements, on the right. 
+
+~~~{.julia}
+function to_expr(code::Vector{Inst}; incremental_simplify=true)
     code = strip_introns(code, [1])
-    isempty(code) && return DEFAULT_EXPR
+    if isempty(code)
+        # If there's no code to execute, R[1] remains 0
+        return false 
+    end
     expr = pop!(code) |> to_expr
-    @assert expr.head == :(=)
     LHS, RHS = expr.args
     while !isempty(code)
         e = pop!(code) |> to_expr
-        @assert e.head == :(=)
         lhs, rhs = e.args
-        Expressions.replace!(RHS, lhs=>rhs)
+        RHS = Expressions.replace(RHS, lhs=>rhs)
     end
-    Expressions.replace!(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
-    RHS
+    # Since we initialize the R registers to `false`, any remaining R references
+    # can be replaced with `false`.
+    Expressions.replace(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
 end
- 
-~~~~
+~~~
+
+When this function terminates, the only remaining variables in the expression will be those which correspond to the immutable input registers, and the program appears as a pure Boolean function over the inputs.
+
+### Simplifying Symbolic Expression Trees
+
+#### Incremental Simplification
+
+The cost of expression simplification grows explosively with the size of the expression, and worst-case expression complexity tends to grow with the length of the instruction list. And, in general, as a population of programs evolves, in search of a target function, there will tend to be a complexification of implicit logical structure in those programs. For these reasons, it's often better to apply the simplification algorithm incrementally, after each replacement operation in the decompilation algorithm, than it is to wait for the entire list to be decompiled into a single complex expression before simplification begins.
+
+
+
+
+
+#### Caching
+
+`evoL`, here, is a new, single-island population of 100 genotypes, each with a maximum code length of 100, using 6 immutable input registers, `D[1:6]` and 6 mutable scratch registers, `R[1:6]`. `R[1]` is designated as the output register -- whichever value is held by `R[1]` at the end of execution is taken as the program's return value.
+
+![Mean Naive Expression Complexity Over Time](https://i.imgur.com/OYQTHoE.png)
+
+
+The exact numbers can vary wildly from run to run, even when, as here, we begin with identical initial populations. But the expression complexity of the naively decompiled programs is _consistently_ orders of magnitude greater than what we find in the simplified program, and growing at a tremendously accelerated rate.
+
+![Mean naive expression complexity over time, a second trial](https://i.imgur.com/0L6SGGj.png)
+
+
+And it only gets worse from there, for the naive method of expression decompilation, while our simpification technique appears to consistently suppress expression bloat.
+
+![Mean naive expression complexity over time, after 1000 tournaments](https://i.imgur.com/VrXD6TY.png)
+
+
+By utilizing a 512 mibibyte cache with the `simplify()` function, we're able to obtain an impressive, 100x speedup when decompiling a virgin, unevolved population.
+
+~~~ {.julia}
+julia> Expressions._use_cache(false); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), cache=false)
+908.448 μs (3226 allocations: 281.33 KiB)
+true
+
+julia> Expressions._use_cache(true); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
+8.610 μs (57 allocations: 2.39 KiB)
+:(D[1])
+~~~
+
+Now, naive (unsimplified) expression complexity tends to increase as the population evolve (TODO: plot this!), as more or less coherent logical structure begins to crystalize in the soup of once merely random instructions. This makes the simplification algorithm increasingly costly to run. Indeed, before we implemented incremental simplification in the decompilation algorithm, simplifying genome at a late stage in the evolution would often take upwards of 30 minutes, if it didn't exhaust the memory of our workstation entirely.
+
+Furthermore, since the population evolves through recombinatorial (and sometimes mutational) means -- even though this is at the level of linear instructions and not symbolic expressions -- we should expect common subexpressions to recur quite frequently, which makes a compelling case for caching.
+
+~~~ {.julia}
+julia> @showprogress for i in 1:1000 Step.do_step!(evoL); end
+Progress: 100%|██████████████████████████████████████████████████████| Time: 0:00:05
+
+julia> Expressions._use_cache(true); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
+  29.740 μs (200 allocations: 8.66 KiB)
+:((D[5] & (D[1] | D[6])) & (D[2] | D[3]))
+
+julia> Expressions._use_cache(false); Expressions.flush_cache!()
+LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
+
+julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), cache=false)
+  109.895 ms (36699 allocations: 3.11 MiB)
+:(((D[1] | D[6]) & (D[3] | D[4])) & (D[5] | D[6]))
+~~~
+
+#### Alpha-Reduction Invariant Caching
+
+Since the possibilities for simplifying an expression do not depend on the particular choice of variable names, it would be a waste of time to perform the expensive computations involved in simplifying an expression $e$ if we have already simplified $e'$, so long as $e$ can be produced by renaming the variables in $e'$, in a one-to-one fashion. In the terminology of $\lambda$-calculus, $e$ and $e'$ are thus said to be $\alpha$-equivalent, or equivalent modulo $\alpha$-reduction.
+
+Our caching algorithm captures this intuition by applying a canonical variable renaming on expressions and their simplifications before entering them into the cache, and by applying the same renaming scheme on an expression before consulting the cache for known simplifications.
+
+~~~{.julia}
+function check_cache(e)
+    try
+        α, mapping = rename_variables(e)
+        result_α = CACHE[α] # may throw a KeyError
+        return restore_variables(result_α, mapping)
+    catch er # KeyError
+        if !(er isa KeyError) throw(er) end
+        return nothing
+    end
+end
+
+function cache(e, result)
+    e_α, mapping = rename_variables(e)
+    result_α, _ = rename_variables(result; mapping)
+    CACHE[e_α] = result_α
+end
+~~~
+
+The renaming scheme itself is simple: we perform a pre-order traversal on the expression (any fixed traversal scheme will do), and whenever we encounter a new variable, we choose a new name for it from a fixed list of variable names that we know do not occur in the expression. 
+
+~~~{.julia}
+function alpha_mapping(e; letter=:α)
+    vars = variables_used(e)
+    α = [:($(letter)[$(i)]) for i in 1:length(vars)]
+    zip(vars, α)
+end
+
+function rename_variables(e::Expr; letter=:α, mapping=alpha_mapping(e;letter))
+    e_α = subs(e, Dict(mapping))
+    return (e_α, mapping)
+end
+
+function restore_variables(e::Expr, mapping)
+    subs(e, Dict((v,a) for (a,v) in mapping))
+end
+~~~
+
+For example, this gives us:
+
+~~~{.julia}
+e = :((~(D[2] ⊻ D[3]) | (D[4] & D[1] ⊻ (D[1] | D[2]))) ⊻ D[4])
+D[2] --> α[1]
+D[3] --> α[2]
+D[4] --> α[3]
+D[1] --> α[4]
+α = :((~(α[1] ⊻ α[2]) | (α[3] & α[4] ⊻ (α[4] | α[1]))) ⊻ α[3])
+
+~~~
+
+Any expression that is $\alpha$-equivalent to $e$ will be mapped to the exact same expression by our `rename_variables()` function. (It follows, incidentally, that this renaming operation is idempotent.)
+
+$$\forall e\forall x \left(x \equiv^\alpha e \implies \texttt{rename_variables(}x\texttt{)[1]} = \texttt{rename_variables(}e\texttt{)[1]}\right)$$
+
+
+### Geographical Distribution
+
+In this particular example, for the sake of simplicity, we'll look at a single island (and single process) evolution. Each island can be structured as the surface of an n-dimensional torus, but we'll stick to two dimensions here. When a tournament is arranged, Cockatrice begins by chosing a random point on the island, and then randomly selects competitors from the neighbourhood of that point. The closer an individual is to the point in question, the more likely their participation in that tournament becomes. The steepness of the distribution curve around that point can be adjusted by tweaking the `locality` parameter in the system's configuration file.
+
+<img src="https://i.imgur.com/DKBaDbn.png" height="500px" alt="Geographically constrained tournament delegation weights, on a 2-dimensional toroidal geometry">
+
+
+![Five samples of tournament batches](https://i.imgur.com/lIHvtIk.jpg)
+
 
 ## 4-to-1 Multiplexor Experiment
 
@@ -338,6 +577,8 @@ aggregate_reward  = mean(adjusted_rewards)
 
 #### Distribution of Populations at End of Run
 
+NOTE: these plots kind of suck. Put something better together on Monday night, I guess. 
+
 ![](https://i.imgur.com/D9NYWjx.png)
 
 ![](https://i.imgur.com/z8FAdTL.png)
@@ -345,6 +586,7 @@ aggregate_reward  = mean(adjusted_rewards)
 #### Interaction Matrices
 
 The loss of behavioural diversity in the poulation where fitness sharing is not in effect is evident to even a visual inspection of its interaction matrices, as shown below. Consistent bars of black and white, spanning multiple columns, indicates a lack of heterogeneity in the population. Note that horizontal locality does have some significance here, since the propagation of genes is probabilistically influenced by geographical structure, as noted earlier.
+
 
 
 ![Visualization of the interaction matrices of four islands early in the evolutionary process, without fitness sharing](https://i.imgur.com/UQJXati.png)
@@ -680,6 +922,9 @@ R[05] ← ~ R[11]
 R[01] ← R[01] | R[05]
 ```
 
+We then "decompile" this linear register-transfer code into a symbolic expression, which is frequently quite hairy, so we use the `sympy` symbolic computation library to simplify it to a feasibly human-readable form.
+
+![](https://i.imgur.com/60DuNZZ.png)
 
 
 ![Distribution of objective performance across the eight subpopulations](https://i.imgur.com/udbdMis.png)
@@ -690,3 +935,4 @@ R[01] ← R[01] | R[05]
 
 
 ![Interaction matrices for the 8-to-1 Multiplexor experiment](https://i.imgur.com/6uXm7Jf.png)
+
