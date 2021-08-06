@@ -76,14 +76,26 @@ Briefly, finding a junta is a useful preprocessing step for focusing sampling fo
 
 `Cockatrice.jl` is a general genetic programming (GP) framework that are developing for use in the REFUSR project (and its sister project, ROPER, which was partially developed under the AIMEE contract, but which falls outside the scope of ReMath). What Cockatrice provides in this case is a multiprocessing system that takes care of the basic evolutionary search architecture: a collection of geographically structured "island" populations are maintained, abstracting away from the details of individual genotypes, their phenotypic expression, and fitness functions, and tournament selection is scheduled and dispatched. 
 
-## Design Decisions
 
 
 
 
+## Geographical Distribution
+
+As a means of supporting population diversity and facilitating parallelism, we have divided our populations into a set of "islands", which evolve independently from one another, save for occasional migration.
+Each island has its own two-dimensional, toroidal geography.
 
 
-### Linear Genetic Programming in REFUSR
+When a tournament is arranged, Cockatrice begins by chosing a random point on the island, and then randomly selects competitors from the neighbourhood of that point. The closer an individual is to the point in question, the more likely their participation in that tournament becomes. The steepness of the distribution curve around that point can be adjusted by tweaking the `locality` parameter in the Cockatrice's configuration file.
+
+<img src="https://i.imgur.com/DKBaDbn.png" height="500px" alt="Geographically constrained tournament delegation weights, on a 2-dimensional toroidal geometry">
+
+
+![Five samples of tournament batches](https://i.imgur.com/lIHvtIk.jpg)
+
+
+
+## Linear Genetic Programming in REFUSR
 
 When designing the GP system used in REFUSR, itself, we first considered using a tree-based form of GP, in the tradition of John Koza, where each individual genotype is represented as an abstract syntax tree or symbolic expression. The idea here was that since we're ultimately looking to evolve program specifications (constrained by problem sets and inferred properties), it would be nice if our genotype representation was _already_ "human readable", or expressible as a clear algebraic expression.
 
@@ -105,7 +117,7 @@ Crucially, every linear program of jump-free register transfer instructions will
 
 It should be noted that _every concatenation of register transfer instructions_ constitutes a valid linear program. The only restriction we impose is on length, for which we set an upper bound, configurable for each experiment, in order to guard against the exhaustion of computational resources.
 
-#### The Probability Distribution of Linear Programs
+### The Probability Distribution of Linear Programs
 
 The set of linear programs under length $\ell$ is easy to sample from with uniform probability. The distribution of instructions, $\mathbb{INST}$, is just the product of the three independent distributions of available source registers, destination registers, and operators.
 
@@ -119,7 +131,7 @@ To sample uniformly from the space of possible programs of length $\ell$, all th
 
 
 
-### An Argument for Immutable Input Registers and Mutable Scratch Registers
+## An Argument for Immutable Input Registers and Mutable Scratch Registers
 
 By **machine state**, here, we will mean only the register vector, as this is the only struture in the VM that our instructions are able to influence. The program counter increments inexorably with each instruction's execution, since there are no jumps, so we can ignore it in the following discussion.
 
@@ -148,17 +160,49 @@ In our implementation, the input registers $D$ are immutable -- they can be chos
 
 
 
-### Decompilation and Simplification
+## Decompilation and Simplification
 
 
 In order for our results to be of any use to a subject area expert, we translate the programs that constitute our genetic representations into concise symbolic expressions (the absence of jumps and conditionals greatly simplifies this process as well).
 
 
-REFUSR's linear genotypes are composed of a series of primitive register transfer instructions. They resemble assembly code for a simple virtual machine.
+REFUSR's linear genotypes are composed of a series of primitive register transfer instructions. They resemble assembly code for a simple virtual machine. 
+
+The following snippet of code can be taken as a concrete example. This is register transfer code formed the genotype for a champion specimen in an experiment in which the goal was to evolve a 4-to-1 multiplexor gate. 
 
 ~~~{.asm}
-TODO: example, use a 4-to-1 mux champion, and then show the
-decompiled expression as well.
+R[01] ← ~ D[03]
+R[04] ← mov D[01]
+R[01] ← R[01] & R[04]
+R[01] ← R[01] & D[04]
+R[03] ← ~ D[02]
+R[03] ← R[03] | D[03]
+R[03] ← R[03] | D[01]
+R[04] ← ~ R[03]
+R[02] ← ~ R[04]
+R[03] ← ~ R[02]
+R[01] ← R[01] | R[03]
+R[04] ← mov R[01]
+R[02] ← mov D[03]
+R[01] ← R[01] | R[02]
+R[02] ← ~ R[04]
+R[03] ← ~ R[02]
+R[01] ← R[01] & D[05]
+R[01] ← R[01] & D[01]
+R[01] ← R[01] | R[03]
+R[03] ← mov D[03]
+R[04] ← ~ R[03]
+R[02] ← ~ R[04]
+R[03] ← ~ R[02]
+R[03] ← R[03] | D[01]
+R[04] ← ~ R[03]
+R[02] ← ~ R[04]
+R[04] ← mov R[01]
+R[04] ← R[04] | D[06]
+R[03] ← ~ R[02]
+R[01] ← R[01] | R[03]
+R[01] ← R[01] & R[04]
+R[01] ← R[01] & R[04]
 ~~~
 
 Internally, each instruction is defined as a Julia `struct`, with fields for the source and destination register, the operator (a function), and that operator's arity. (Though we're currently not using any, since they invariably destroy execution information and inhibit evolutionary search, constants can be defined as nullary functions in this fashion, by setting the arity field to zero, and the operator field to `() -> true` or `() -> false`.)
@@ -210,19 +254,105 @@ end
 
 When this function terminates, the only remaining variables in the expression will be those which correspond to the immutable input registers, and the program appears as a pure Boolean function over the inputs.
 
-### Simplifying Symbolic Expression Trees
 
-#### Incremental Simplification
+
+## Simplifying Symbolic Expression Trees
+
+The expressions generated from linear programs in this fashion have the unfortunate property that they tend to rapidly grow in complexity, becoming tarpits into which computational resources can be sunk, and unreadable thickets of parentheses that offer little insight to the subject area expert who might be hoping to use such formulas to assist in reverse engineering a black-boxed function.
+
+Fortunately, expression rewriting and simplification tools have existed for decades, and there's no reason to reinvent this particular wheel from scratch. Like many of the other ReMath teams, the REFUSR project has converged on the Python symbolic mathematics library, [SymPy](https://www.sympy.org/en/index.html). SymPy's interoperation with our primarily Julia codebase isn't seamless, but we were greatly assisted by the PyCall API in this regard. All that remained was to write a little bit of translation code to allow Julia expressions to be translated into SymPy expressions (a proper subset of Python expressions) and back, and to implement the optimizations that would make this tool usable for us -- culminating in an $\alpha$-reduction invariant expression cache.
+
+### Intron Stripping
+
+Before we even reach the decompilation stage, however, there's an inexpensive simplification that we can perform on the linear program itself. To do this, we use an algorithm which I believe goes back to Wolfgang Banzhaf. 
+
+
+~~~{.julia}
+@inline function semantic_intron(inst::Inst)::Bool
+    inst.op ∈ (&, |, mov) && (inst.src == inst.dst)
+end
+
+
+function get_effective_indices(code, out_regs)
+    active_regs = copy(out_regs)
+    active_indices = []
+    for (i, inst) in reverse(enumerate(code) |> collect)
+        if !(semantic_intron(inst)) && inst.dst ∈ active_regs
+            push!(active_indices, i)
+            filter!(r -> r != inst.dst, active_regs)
+            inst.arity == 2 && push!(active_regs, inst.dst)
+            inst.arity >= 1 && push!(active_regs, inst.src)
+        end
+    end
+    reverse(active_indices)
+end
+
+
+function strip_introns(code, out_regs)
+    code[get_effective_indices(code, out_regs)]
+end
+~~~
+
+This gives us what Banzhaf calls the "effective code" of the genotype, the code that actually influences the output. A great deal of execution time can be saved, in fact, by _only_ executing these instructions, while ignoring the rest of the chromosome, and this is just what Cockatrice does. The example of linear code displayed above, in fact, shows only the effective code of the champion 4-to-1 MUX champion.
+
+What remains, once we separate the effective code from a chromosome, is what Banzhaf calls the genotype's "introns", by analogy with non-coding DNA in biological genotypes. The tendency for GP systems to accumulate intron bloat if left unchecked is one of the most interesting, general, and robust phenomena in this domain, but an adequate discussion of this topic is beyond of the scope of this report.
+
+### Incremental Simplification
 
 The cost of expression simplification grows explosively with the size of the expression, and worst-case expression complexity tends to grow with the length of the instruction list. And, in general, as a population of programs evolves, in search of a target function, there will tend to be a complexification of implicit logical structure in those programs. For these reasons, it's often better to apply the simplification algorithm incrementally, after each replacement operation in the decompilation algorithm, than it is to wait for the entire list to be decompiled into a single complex expression before simplification begins.
 
+On reflection, moreover, we can see that there's no need to attempt simplification after _every_ assignment is decompiled into a subexpression substitution -- there's only reason to do so when the `rhs` of the assignment shares variables with the accumulated expression, _minus_ the assignment's `lhs`. If there are no shared variables, then there can be no _new_ logical relations, unless the new `rhs` term evaluates to a constant `true` or `false`.
+
+Since the only instruction in our instruction set that can result in a single instruction evaluating to a Boolean value is `xor`, we can easily faciliate that case by adding an _ad hoc_ condition to the beginning of our `to_expr(inst::Inst)` method:
+
+~~~{.julia}
+if inst.op == xor && inst.src == inst.dst return false end
+~~~
+
+The decompiler function now reads as follows:
+
+~~~{.julia}
+function to_expr(code::Vector{Inst}; 
+                 intron_free = true, 
+                 incremental_simplify = true,
+                 alpha_cache=true)
+    code = intron_free ? copy(code) : strip_introns(code, [1])
+    if isempty(code)
+        return false
+    end
+    expr = pop!(code) |> to_expr
+    LHS, RHS = expr.args
+    while !isempty(code)
+        e = pop!(code) |> to_expr
+        lhs, rhs = e.args
+        RHS = Expressions.replace(RHS, lhs => rhs)
+
+        if incremental_simplify
+            # We only need to simplify again if rhs has common variables with RHS minus lhs
+            RHS_minus_lhs = Exp.replace(RHS, lhs => :XYZZY)
+            if rhs isa Bool || Exp.shares_variables(RHS_minus_lhs, rhs)
+                RHS = Exp.simplify(RHS; alpha_cache)
+            end
+        end
+    end
+    # Since we initialize the R registers to `false`, any remaining R references
+    # can be replaced with `false`.
+    RHS = Expressions.replace(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
+    if incremental_simplify
+        return Expressions.simplify(RHS; alpha_cache)
+    else
+        return RHS
+    end
+end
+~~~
 
 
 
+### Caching
 
-#### Caching
+Let's look closely at particular, single-island population of 100 genotypes, each with a maximum code length of 100, using 6 immutable input registers, `D[1:6]`, and 6 mutable scratch registers, `R[1:6]`. `R[1]` is designated as the output register -- whichever value is held by `R[1]` at the end of execution is taken as the program's return value.
 
-`evoL`, here, is a new, single-island population of 100 genotypes, each with a maximum code length of 100, using 6 immutable input registers, `D[1:6]` and 6 mutable scratch registers, `R[1:6]`. `R[1]` is designated as the output register -- whichever value is held by `R[1]` at the end of execution is taken as the program's return value.
+What we are tracking here is growth in complexity of expressions obtained from our linear program population $P$ by applying our "naïve" decompilation algorithm to those programs, $N(P)$, and the complexity of the expressions obtained from the latter by simplification, $S(N(P))$.
 
 ![Mean Naive Expression Complexity Over Time](https://i.imgur.com/OYQTHoE.png)
 
@@ -255,30 +385,13 @@ julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
 :(D[1])
 ~~~
 
-Now, naive (unsimplified) expression complexity tends to increase as the population evolve (TODO: plot this!), as more or less coherent logical structure begins to crystalize in the soup of once merely random instructions. This makes the simplification algorithm increasingly costly to run. Indeed, before we implemented incremental simplification in the decompilation algorithm, simplifying genome at a late stage in the evolution would often take upwards of 30 minutes, if it didn't exhaust the memory of our workstation entirely.
+Now, naive (unsimplified) expression complexity tends to increase as the population evolves, as more or less coherent logical structure begins to crystalize in the soup of once merely random instructions. This makes the simplification algorithm increasingly costly to run. Indeed, before we implemented incremental simplification in the decompilation algorithm, simplifying genome at a late stage in the evolution would often take upwards of 30 minutes, if it didn't exhaust the memory of our workstation entirely.
 
 Furthermore, since the population evolves through recombinatorial (and sometimes mutational) means -- even though this is at the level of linear instructions and not symbolic expressions -- we should expect common subexpressions to recur quite frequently, which makes a compelling case for caching.
 
-~~~ {.julia}
-julia> @showprogress for i in 1:1000 Step.do_step!(evoL); end
-Progress: 100%|██████████████████████████████████████████████████████| Time: 0:00:05
 
-julia> Expressions._use_cache(true); Expressions.flush_cache!()
-LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
 
-julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), assign=false)
-  29.740 μs (200 allocations: 8.66 KiB)
-:((D[5] & (D[1] | D[6])) & (D[2] | D[3]))
-
-julia> Expressions._use_cache(false); Expressions.flush_cache!()
-LRU{Expr, Union{Bool, Expr, Symbol}}(; maxsize = 1048576)
-
-julia> @btime s = LinearGenotype.decompile(rand(evoL.geo.deme), cache=false)
-  109.895 ms (36699 allocations: 3.11 MiB)
-:(((D[1] | D[6]) & (D[3] | D[4])) & (D[5] | D[6]))
-~~~
-
-#### Alpha-Reduction Invariant Caching
+### Alpha-Reduction Invariant Caching
 
 Since the possibilities for simplifying an expression do not depend on the particular choice of variable names, it would be a waste of time to perform the expensive computations involved in simplifying an expression $e$ if we have already simplified $e'$, so long as $e$ can be produced by renaming the variables in $e'$, in a one-to-one fashion. In the terminology of $\lambda$-calculus, $e$ and $e'$ are thus said to be $\alpha$-equivalent, or equivalent modulo $\alpha$-reduction.
 
@@ -334,605 +447,119 @@ D[1] --> α[4]
 
 ~~~
 
-Any expression that is $\alpha$-equivalent to $e$ will be mapped to the exact same expression by our `rename_variables()` function. (It follows, incidentally, that this renaming operation is idempotent.)
+Any expression that is $\alpha$-equivalent to $e$ will be mapped to the exact same expression by our `rename_variables()` function. 
 
 $$\forall e\forall x \left(x \equiv^\alpha e \implies \texttt{rename_variables(}x\texttt{)[1]} = \texttt{rename_variables(}e\texttt{)[1]}\right)$$
 
+It follows, incidentally, that the renaming operation is idempotent.
 
-### Geographical Distribution
+### Example
 
-In this particular example, for the sake of simplicity, we'll look at a single island (and single process) evolution. Each island can be structured as the surface of an n-dimensional torus, but we'll stick to two dimensions here. When a tournament is arranged, Cockatrice begins by chosing a random point on the island, and then randomly selects competitors from the neighbourhood of that point. The closer an individual is to the point in question, the more likely their participation in that tournament becomes. The steepness of the distribution curve around that point can be adjusted by tweaking the `locality` parameter in the system's configuration file.
+With this "decompilation" system in place, the linear program presented above can be translated into the a concise expression, which defines the multiplexor as the following sum of products:
 
-<img src="https://i.imgur.com/DKBaDbn.png" height="500px" alt="Geographically constrained tournament delegation weights, on a 2-dimensional toroidal geometry">
+$$(D_1 \wedge D_3 \wedge D_5) \vee (D_1 \wedge D_4 \wedge \neg D_3) \vee (D_3 \wedge D_6 \wedge \neg D_1) \vee (D_2 \wedge \neg D_1 \wedge \neg D_3)$$
+
+REFUSR also emits a graphical representation of these simplified expressions, which can be of great assistance in analysis. Here we can see not only that we're looking at a multiplexor, but that the two variables $D_1$ and $D_3$ serve as the control bits.
+
+![Syntax graph of a 4-to-1 multiplexor specimen](https://i.imgur.com/pMbBw3b.png)
 
 
-![Five samples of tournament batches](https://i.imgur.com/lIHvtIk.jpg)
+## The Use of Execution Trace Information
 
-
-## 4-to-1 Multiplexor Experiment
-
-![Circuit diagram of a 4-to-1 multiplexor (MUX)](https://i.imgur.com/44qOigJ.png)
-
-(TODO: Find consistent looking diagrams for the multiplexers)
-
-### Configuration
-
-```
-experiment_duration: 1500
-preserve_population: true
-
-selection:
-  fitness_function: "fit"
-  data: "./samples/2-MUX_overs-cohos-orbed_ALL.csv"
-  d_fitness: 3
-  t_size: 6
-  fitness_sharing: true
-
-genotype:
-  max_depth: 8
-  min_len: 4
-  max_len: 500
-  inputs_n: 7
-  output_regs: [1]
-  max_steps: 512
-  mutation_rate: 0.1
-
-population:
-  size: [12, 12]
-  toroidal: true
-  locality: 16
-  n_elites: 10
-  migration_rate: 0.1
-  migration_type: "elite"
-
-logging:
-  log_every: 1
-  save_every: 50
+One plausible metric for efficiently approximating how "near" a candidate program is to the target is to measure the mutual information between its output vector and the target output vector (normalized by dividing the result by the target vector's entropy).
+For instance, these two programs will have amount of mutual information from any target. This is a desirable property, since, though they differ greatly in hamming distance, they are just one mutational step apart: the second is just the first, negated.
 
 ```
-
-### Target as a Symbolic Expression
-
-```
-:((((~(~(D[3]) & ~(D[1])) | D[2]) & (~(D[3] & ~(D[1])) | D[6])) & (~(~(D[3]) & D[1]) | D[4])) & (~(D[3] & D[1]) | D[5]))
+D[1] & D[2]   = 0001
+~D[1] | ~D[2] = 1110
 ```
 
-### Target as a Structured Text (ST) Program
-
-```
-(*
-This code implements a shuffled multiplexer with 2 control bits.
-The control bits are: Data[3], Data[1]
-The input bits are: Data[2], Data[6], Data[4], Data[5]
-
-The symbolic expression is:
-(((~(~(D[3]) & ~(D[1])) | D[2]) & (~(D[3] & ~(D[1])) | D[6])) & (~(~(D[3]) & D[1]) | D[4])) & (~(D[3] & D[1]) | D[5])
-
-*)
-
-FUNCTION_BLOCK F_CollectInput
-  VAR_IN_OUT
-      Data : ARRAY[1..10] OF BOOL;
-  END_VAR
-  VAR_INPUT
-      TICK  : BOOL := 0;
-      IN1   : BOOL := 0;
-      IN2   : BOOL := 0;
-      IN3   : BOOL := 0;
-      IN4   : BOOL := 0;
-      IN5   : BOOL := 0;
-      RESET : BOOL := FALSE;
-  END_VAR
-  VAR_OUTPUT
-      Finished : BOOL;
-  END_VAR
-  VAR
-      j    : USINT := 1;
-      tock : BOOL  := 0;
-  END_VAR
-  IF NOT RESET AND tock = NOT TICK THEN
-      Data[j]   := IN1;
-      Data[j+1] := IN2;
-      Data[j+2] := IN3;
-      Data[j+3] := IN4;
-      Data[j+4] := IN5;
-      j := j + 5;
-      tock := TICK;
-  ELSE
-      j := 1;
-      tock := 0;
-  END_IF;
-  Finished := (j > 10);
-END_FUNCTION_BLOCK
+Programs reproduce not only through mutation but recombination as well. This motivates us to assign fitness scores not only on the basis of a program's final output but its intermediate states as well -- a useless final output does not mean that a program doesn't contain computational resources that crossover might extract.
 
 
-PROGRAM Boiler
-  VAR
-    Data  : ARRAY[1..10] OF BOOL;
-    Ready : BOOL;
-    CollectInput : F_CollectInput;
-  END_VAR
-  VAR
-    TICK     AT %IX1.0 : BOOL;
-    IN1      AT %IX0.3 : BOOL;
-    IN2      AT %IX0.4 : BOOL;
-    IN3      AT %IX0.5 : BOOL;
-    IN4      AT %IX0.6 : BOOL;
-    IN5      AT %IX0.7 : BOOL;
-    OutReady AT %QX0.0 : BOOL := FALSE;
-    FeedNext AT %QX0.1 : BOOL := FALSE;
-    Out      AT %QX0.2 : BOOL;
-  END_VAR
-  CollectInput(TICK:=TICK, IN1:=IN1, IN2:=IN2, IN3:=IN3, IN4:=IN4, IN5:=IN5);
-  Ready := CollectInput.Finished;
-  FeedNext := 1;
-  IF Ready THEN
-    Out := (((((NOT ((NOT D[3]) AND (NOT D[1]))) OR D[2]) AND ((NOT (D[3] AND (NOT D[1]))) OR D[6])) AND ((NOT ((NOT D[3]) AND D[1])) OR D[4])) AND ((NOT (D[3] AND D[1])) OR D[5]));
-    OutReady := 1;
-    CollectInput(RESET:=TRUE);
-  END_IF;
-END_PROGRAM
+![Execution trace of an 8-to-1 multiplexor champion](https://i.imgur.com/EL5fPSC.png)
 
+Cockatrice supplies this information by recording a **trace** of machine states after each instruction in a program is executed. This gives us a three-dimensional array $T$ whose axes correspond to the (mutable) register index $r$, the choice of input vector (i.e., the truth table row from which the input is drawn) $i$, and the instruction index $pc$.  
 
-CONFIGURATION Config0
-  RESOURCE Res0 ON PLC
-    TASK task0(INTERVAL := T#20ms,PRIORITY := 0);
-    PROGRAM instance0 WITH task0 : Boiler;
-  END_RESOURCE
-END_CONFIGURATION
-```
+We then compute an information record by iterating over the trace's $pc$ axis, and attending to the most recently modified register index on $r$. This gives us a vector $T_{pc,r}$. We calculate the mutual information of this state vector with the target, and divide the result by the target's Shannon entropy to normalize the score.
 
-### Target as Truth Table
+$$m = \left< \frac{I(T_{pc,r};\textrm{Target})}{H(\textrm{Target})} ~\vert~ pc \in 1\dots\ell(\textrm{program}) \right>$$
 
-|D[1]|D[2]|D[3]|D[4]|D[5]|D[6]|OUT|
-|----|----|----|----|----|----|---|
-|0   |0   |0   |0   |0   |0   |0  |
-|1   |0   |0   |0   |0   |0   |0  |
-|0   |1   |0   |0   |0   |0   |1  |
-|1   |1   |0   |0   |0   |0   |0  |
-|0   |0   |1   |0   |0   |0   |0  |
-|1   |0   |1   |0   |0   |0   |0  |
-|0   |1   |1   |0   |0   |0   |0  |
-|1   |1   |1   |0   |0   |0   |0  |
-|0   |0   |0   |1   |0   |0   |0  |
-|1   |0   |0   |1   |0   |0   |1  |
-|0   |1   |0   |1   |0   |0   |1  |
-|1   |1   |0   |1   |0   |0   |1  |
-|0   |0   |1   |1   |0   |0   |0  |
-|1   |0   |1   |1   |0   |0   |0  |
-|0   |1   |1   |1   |0   |0   |0  |
-|1   |1   |1   |1   |0   |0   |0  |
-|0   |0   |0   |0   |1   |0   |0  |
-|1   |0   |0   |0   |1   |0   |0  |
-|0   |1   |0   |0   |1   |0   |1  |
-|1   |1   |0   |0   |1   |0   |0  |
-|0   |0   |1   |0   |1   |0   |0  |
-|1   |0   |1   |0   |1   |0   |1  |
-|0   |1   |1   |0   |1   |0   |0  |
-|1   |1   |1   |0   |1   |0   |1  |
-|0   |0   |0   |1   |1   |0   |0  |
-|1   |0   |0   |1   |1   |0   |1  |
-|0   |1   |0   |1   |1   |0   |1  |
-|1   |1   |0   |1   |1   |0   |1  |
-|0   |0   |1   |1   |1   |0   |0  |
-|1   |0   |1   |1   |1   |0   |1  |
-|0   |1   |1   |1   |1   |0   |0  |
-|1   |1   |1   |1   |1   |0   |1  |
-|0   |0   |0   |0   |0   |1   |0  |
-|1   |0   |0   |0   |0   |1   |0  |
-|0   |1   |0   |0   |0   |1   |1  |
-|1   |1   |0   |0   |0   |1   |0  |
-|0   |0   |1   |0   |0   |1   |1  |
-|1   |0   |1   |0   |0   |1   |0  |
-|0   |1   |1   |0   |0   |1   |1  |
-|1   |1   |1   |0   |0   |1   |0  |
-|0   |0   |0   |1   |0   |1   |0  |
-|1   |0   |0   |1   |0   |1   |1  |
-|0   |1   |0   |1   |0   |1   |1  |
-|1   |1   |0   |1   |0   |1   |1  |
-|0   |0   |1   |1   |0   |1   |1  |
-|1   |0   |1   |1   |0   |1   |0  |
-|0   |1   |1   |1   |0   |1   |1  |
-|1   |1   |1   |1   |0   |1   |0  |
-|0   |0   |0   |0   |1   |1   |0  |
-|1   |0   |0   |0   |1   |1   |0  |
-|0   |1   |0   |0   |1   |1   |1  |
-|1   |1   |0   |0   |1   |1   |0  |
-|0   |0   |1   |0   |1   |1   |1  |
-|1   |0   |1   |0   |1   |1   |1  |
-|0   |1   |1   |0   |1   |1   |1  |
-|1   |1   |1   |0   |1   |1   |1  |
-|0   |0   |0   |1   |1   |1   |0  |
-|1   |0   |0   |1   |1   |1   |1  |
-|0   |1   |0   |1   |1   |1   |1  |
-|1   |1   |0   |1   |1   |1   |1  |
-|0   |0   |1   |1   |1   |1   |1  |
-|1   |0   |1   |1   |1   |1   |1  |
-|0   |1   |1   |1   |1   |1   |1  |
-|1   |1   |1   |1   |1   |1   |1  |
+The high point of this vector, $\max(m)$, is inserted into the fitness vector as one of three attributes that will be used to rank tournament competitors and decide who will go on to reproduce, and who will be culled from the population.
 
 
 
-### Implicit Fitness Sharing and Interaction Matrices
+### Weighting the Distribution of Crossover Points with Trace Information
+
+We then retain the trace information vector, and store it in one of the genotype's metadata fields. If that genotype should happen to reproduce, the trace information vector $m$ will be used to influence the choice of crossover point.
+
+![A plot of trace information by active register, taken from a champion of the 8-to-1 multiplexor experiment.](https://i.imgur.com/ncXvITe.png)
+ 
+
+The basic crossover algorithm we use in Cockatrice is one-point crossover. Ordinarily, this involves selecting two parent genotypes, $m$ and $f$, and then choosing, with uniform probability, an index for each, $m_i$ and $f_j$. We then construct two child genotypes, $b$ and $s$, like so:
+
+$$b = \left< m_1, m_2, \dots m_i; f_{j+1}, f_{j+2}, \dots f_\textrm{end}\right> \\
+s = \left< f_1, f_2, \dots f_j; m_{i+1}, m_{i+2}, \dots m_\textrm{end}\right>
+$$
+
+Our algorithm differs only in the choice of the crossover points $i$ and $j$. Rather than drawing these from the set of $m$ and $f$'s indices with uniform probability, we define a probability distribution for each parent on the basis of the the information trace $m$.
+
+![Weighting the distribution of crossover points on the chromosome with trace information](https://i.imgur.com/5ll5byf.jpg)
+
+The idea here is that we thereby increase the odds of chosing a particularly "fruitful" site for recombination, breaking each genotype at a site where it was potentially "on the right track", and cutting away from the genome sites where information is unduly destroyed.
+
+
+
+
+## Implicit Fitness Sharing and Interaction Matrices
 
 One of the most serious hazards that an evolutionary process can encounter is a premature collapse of population diversity. This can happen when a particular genetic line $G$ acquires a decisive competitive advantage early in the process by performing very well on a subset $S \subset T$ of the test cases -- a significantly larger subset, let's say, than those handled by competing gene lines. It may be the case that $G$ lacks the computational resources to handle cases outside of $S$, but so long as the rewards meted out by the fitness function are proportionate to the number of cases correctly solved, without regard for the rarity or difficulty of solutions, we may soon see a population dominated almost entirely by recombinations of $G$, each exhibiting strikingly similar behaviour.
 
-One way to offset such a premature convergence and loss of genetic information is to adjust the reward for a test case according to the frequency with which that test case has been successfully solved. This can easily be done by maintaining a data structure called an _interaction matrix_, a 2-dimensional array whose rows represent test cases and whose columns represent individuals in the population. `I[i,j]` is set to `1` if individual `j` solves test case `i`, and `0` otherwise. Each test case can then be assigned a "difficulty" score simply by subtracting the mean of its row from 1. Each individual then receives an award equal to the mean of the difficulty scores for the problems it's solved. 
+One way to offset such a premature convergence and loss of genetic information is to adjust the reward for a test case according to the frequency with which that test case has been successfully solved. This can easily be done by maintaining a data structure called an _interaction matrix_, a 2-dimensional array whose rows represent test cases and whose columns represent individuals in the population. `I[i,j]` is set to `1` if individual `j` solves test case `i`, and `0` otherwise. Each test case can then be assigned a "difficulty" score simply by taking the mean of its corresponding row, negated. Each individual then receives an award equal to the mean of the difficulty scores for the problems it's solved. 
 
 ~~~{.julia}
-difficulty_scores = 1.0 .- map(mean, eachrow(INTERACTION_MATRIX))
-correct_results   = (!).(answer_vector .⊻ result_vector) # 
-adjusted_rewards  = correct_vector .* difficulty_scores
+difficulty_scores = [(~).(row .⊻ answer_vector) |> mean for row in eachrow(IM)]
+correct_results   = (~).(answer_vector .⊻ result_vector) # 
+adjusted_rewards  = correct_results .* difficulty_scores
 aggregate_reward  = mean(adjusted_rewards)
 ~~~
 
+Interaction matrices are used to calculate the relative selective pressures of each test case -- each set of inputs for a Boolean function, or the input row of its truth table. Each case is assigned a difficulty score, equal to 1 minus the frequency with which its solution appears in the existing population (i.e., (~).(row .⊻ answer_vector) |> mean, in Julia). An individual is assigned a score equal to the mean difficulty of the cases they solved. 
 
 
+Each subpopulation, or "island", maintains its own interaction matrix. In the visualizations to the left, each row represents a test case, and each column represents an individual program. Test cases are sorted by Gray code, to preserve locality on the Boolean hypercube (two adjacent test cases differ by exactly one bit flip), and individuals are sorted according to Hilbert curve through the 2-dimensional island population, to preserve geographical locality.
+
+This provides us with a succinct impression of each population's phenotypic diversity. A lack of diversity in a population shows up in the visualized interaction matrix in the form of solid horizontal stripes, punctuated only by thin and ephemeral columns of noise. A phenotypically diverse population manifests a diversity of column patterns -- not exactly noise, but a greater variety and complexity of pattern.
 
 
+![Interaction matrix of 4-island population *without* fitness sharing, after 100k tournaments. Problem unsolved.](https://i.imgur.com/RKI1LcG.png)
+
+![Interaction matrix of the same 4-island population *without* fitness sharing, after 20k tournaments. Problem unsolved.](https://i.imgur.com/fTIokzL.png)
 
 
-### Without fitness sharing
+![Interaction matrix of a 4-island population *with* fitness sharing, after 20k tournaments. Problem solved.](https://i.imgur.com/FQ5XNEo.png)
+
+### Fitness Sharing Provides a Decisive Advantage
+
+The following plots show the best objective performance found in two batches of 18 trials of the 4-to-1 MUX problem: the first batch without fitness sharing, the second batch with.
+
+Only 61% of the trials without fitness sharing discovered the target function in 50,000 tournaments or fewer, as compared to 100% of the fitness sharing trials.
+
+And the trials with fitness sharing discovered the target in 42% of the time taken by even the successful non-sharing trials, on average.
+
+![18 trials with and without fitness sharing on the 4-to-1 multiplexor problem](https://i.imgur.com/mZVyLrP.png)
+
+It has only been with fitness sharing, moreover, that we have been able to solve the substantially more complex problem of reversing an 8-to-1 multiplexor, a Boolean function of eleven variables. With fitness sharing in effect, Cockatrice is able to consistently find solutions for this problem, typically within a few hours of wall clock time.
+
+![Time series plot of mean and maximum performance in an 8-to-1 multiplexor search.](https://i.imgur.com/QW405ko.png)
+
+![Time series plot of mean and maximum performance in an 8-to-1 multiplexor search.](https://i.imgur.com/c2AHAV3.png)
 
 
-#### Distribution of Populations at End of Run
-
-NOTE: these plots kind of suck. Put something better together on Monday night, I guess. 
-
-![](https://i.imgur.com/D9NYWjx.png)
-
-![](https://i.imgur.com/z8FAdTL.png)
-
-#### Interaction Matrices
-
-The loss of behavioural diversity in the poulation where fitness sharing is not in effect is evident to even a visual inspection of its interaction matrices, as shown below. Consistent bars of black and white, spanning multiple columns, indicates a lack of heterogeneity in the population. Note that horizontal locality does have some significance here, since the propagation of genes is probabilistically influenced by geographical structure, as noted earlier.
+![Disassembly of 8-to-1 multiplexor champion](https://i.imgur.com/vcNR60R.jpg)
 
 
+![8-to-1 multiplexor champion as a symbolic expression](https://i.imgur.com/JMv8H7y.png)
 
-![Visualization of the interaction matrices of four islands early in the evolutionary process, without fitness sharing](https://i.imgur.com/UQJXati.png)
-
-
-
-![The interaction matrices, 90 seconds in, in the populations without fitness sharing](https://i.imgur.com/gg0Ae0s.png)
-
-
-![The interaction matrices in the populations without fitness sharing, at the end of a 1000-second run.](https://i.imgur.com/ewDzZ2F.png)
-
-
-![Difficulty of the problem set over time without fitness sharing](https://i.imgur.com/sEtCK7t.png)
-
-
-### With fitness sharing
-
-#### Distribution of Populations at End of Run
-
-![](https://i.imgur.com/oWher38.png)
-
-
-![](https://i.imgur.com/K4kM0bb.png)
-
-
-#### Interaction Matrices
-
-
-![Visualization of the interaction matrices of four islands early in the evolutionary process, _with_ fitness sharing](https://i.imgur.com/W5czPSD.png)
-
-![The interaction matrices, 90 seconds in, in the populations with fitness sharing](https://i.imgur.com/HDhGIDa.png)
-
-
-![The interaction matrices in the populations _with_ fitness sharing, at the end of a 187-second run.](https://i.imgur.com/LeYNPhO.png)
-
-
-![Difficulty of the problem set over time with fitness sharing](https://i.imgur.com/FWIgypO.png)
-
-
-## 8-to-1 Multiplexor
-
-![Circuit diagram of an 8-to-1 (11-bit) multiplexor](https://i.imgur.com/kxwEJxm.png)
-
-
-### Solution in Linear Register Transfer Code (Unsimplified)
-
-A solution was found after 88,810 tournaments, on one of eight migratory island subpopulations. 
-
-```
-R[02] ← ~ D[10]
-R[04] ← ~ D[06]
-R[01] ← ~ R[02]
-R[01] ← R[01] & D[02]
-R[04] ← R[04] & R[08]
-R[02] ← ~ R[04]
-R[07] ← R[07] & R[07]
-R[08] ← ~ D[04]
-R[04] ← R[04] | D[05]
-R[04] ← R[04] | R[08]
-R[04] ← R[04] & R[08]
-R[07] ← R[07] & R[02]
-R[10] ← ~ R[07]
-R[11] ← ~ R[01]
-R[11] ← R[11] & R[11]
-R[11] ← R[11] | D[01]
-R[11] ← R[11] | D[01]
-R[11] ← R[11] & D[01]
-R[05] ← ~ R[11]
-R[11] ← R[11] & D[01]
-R[06] ← ~ R[11]
-R[10] ← R[10] & R[06]
-R[11] ← ~ R[04]
-R[01] ← R[01] | R[05]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[04] ← R[04] & R[10]
-R[05] ← ~ R[11]
-R[04] ← ~ R[04]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[04] ← R[04] & R[10]
-R[08] ← R[08] & D[10]
-R[04] ← R[04] | D[02]
-R[06] ← ~ D[04]
-R[04] ← R[04] & D[08]
-R[10] ← R[10] & R[06]
-R[01] ← R[01] & D[02]
-R[04] ← R[04] & R[08]
-R[07] ← ~ D[09]
-R[10] ← R[10] & R[06]
-R[11] ← ~ R[04]
-R[07] ← R[07] | D[07]
-R[07] ← R[07] | D[07]
-R[01] ← R[01] | R[05]
-R[07] ← R[07] | D[09]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] | R[07]
-R[05] ← ~ R[11]
-R[04] ← ~ R[04]
-R[07] ← R[07] & D[04]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] & D[02]
-R[07] ← R[07] & R[07]
-R[06] ← ~ D[11]
-R[09] ← ~ D[01]
-R[02] ← ~ R[06]
-R[02] ← R[02] & R[01]
-R[11] ← ~ R[04]
-R[04] ← ~ D[01]
-R[10] ← R[10] & R[11]
-R[11] ← R[11] | D[02]
-R[08] ← ~ R[09]
-R[04] ← R[04] & D[10]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] | R[07]
-R[05] ← ~ R[11]
-R[04] ← ~ R[04]
-R[07] ← R[07] & D[04]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] & D[02]
-R[02] ← R[02] & D[04]
-R[07] ← R[07] & R[07]
-R[06] ← ~ D[11]
-R[09] ← ~ D[01]
-R[05] ← R[05] | R[02]
-R[02] ← ~ R[06]
-R[02] ← R[02] & R[01]
-R[11] ← ~ R[04]
-R[05] ← R[05] & D[10]
-R[11] ← R[11] | D[02]
-R[05] ← R[05] | R[02]
-R[08] ← ~ R[09]
-R[03] ← ~ D[11]
-R[03] ← R[03] & R[08]
-R[05] ← R[05] & R[03]
-R[03] ← R[03] & D[05]
-R[05] ← R[05] | R[02]
-R[03] ← R[03] & R[11]
-R[06] ← ~ D[04]
-R[11] ← R[11] | D[01]
-R[07] ← R[07] | D[07]
-R[11] ← R[11] & D[01]
-R[03] ← R[03] | R[01]
-R[07] ← R[07] & R[07]
-R[11] ← R[11] | R[07]
-R[03] ← R[03] & R[11]
-R[10] ← ~ R[01]
-R[07] ← ~ D[09]
-R[02] ← ~ R[06]
-R[03] ← R[03] & R[11]
-R[04] ← ~ R[02]
-R[03] ← R[03] | R[01]
-R[03] ← R[03] | R[01]
-R[03] ← R[03] | R[01]
-R[11] ← ~ R[04]
-R[06] ← ~ R[11]
-R[03] ← R[03] & D[05]
-R[07] ← R[07] | D[07]
-R[01] ← R[01] | R[05]
-R[06] ← R[06] & D[03]
-R[07] ← R[07] | D[09]
-R[01] ← R[01] & R[11]
-R[10] ← R[10] & R[06]
-R[01] ← R[01] & D[02]
-R[11] ← R[11] | D[01]
-R[07] ← R[07] | D[07]
-R[08] ← ~ R[10]
-R[01] ← R[01] | R[05]
-R[07] ← R[07] | D[09]
-R[01] ← R[01] & R[11]
-R[01] ← R[01] & D[02]
-R[04] ← R[04] & R[08]
-R[11] ← R[11] | D[01]
-R[11] ← R[11] | D[01]
-R[07] ← R[07] | D[07]
-R[11] ← R[11] & D[01]
-R[03] ← R[03] | R[01]
-R[07] ← R[07] & R[07]
-R[11] ← R[11] | R[07]
-R[03] ← R[03] & R[11]
-R[10] ← ~ R[01]
-R[06] ← ~ R[03]
-R[02] ← ~ R[06]
-R[02] ← R[02] & R[01]
-R[11] ← ~ R[04]
-R[02] ← R[02] & D[02]
-R[02] ← R[02] & D[01]
-R[01] ← R[01] & D[05]
-R[01] ← R[01] | R[02]
-R[11] ← R[11] & R[11]
-R[07] ← ~ D[09]
-R[11] ← R[11] | R[07]
-R[11] ← R[11] & R[11]
-R[07] ← ~ D[09]
-R[11] ← R[11] | R[07]
-R[07] ← ~ D[09]
-R[04] ← ~ D[01]
-R[10] ← R[10] & R[11]
-R[11] ← R[11] | D[02]
-R[07] ← R[07] | R[07]
-R[07] ← R[07] | R[07]
-R[05] ← ~ R[11]
-R[11] ← ~ R[04]
-R[04] ← ~ R[04]
-R[07] ← R[07] & D[04]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] & D[02]
-R[07] ← R[07] & D[02]
-R[11] ← R[11] | D[02]
-R[06] ← ~ R[11]
-R[07] ← R[07] | R[07]
-R[07] ← R[07] | R[07]
-R[02] ← ~ R[06]
-R[02] ← R[02] & R[01]
-R[11] ← ~ R[04]
-R[11] ← R[11] | D[02]
-R[11] ← R[11] | R[07]
-R[11] ← R[11] | D[01]
-R[07] ← R[07] | D[07]
-R[07] ← R[07] & R[07]
-R[11] ← R[11] | R[07]
-R[11] ← R[11] & R[02]
-R[05] ← ~ R[11]
-R[01] ← ~ D[06]
-R[01] ← R[01] | D[04]
-R[11] ← ~ D[02]
-R[02] ← ~ R[11]
-R[11] ← ~ D[02]
-R[09] ← ~ R[01]
-R[09] ← R[09] | R[02]
-R[09] ← R[09] & R[01]
-R[09] ← R[09] | D[01]
-R[05] ← R[05] & R[09]
-R[01] ← ~ R[05]
-R[11] ← R[11] | D[02]
-R[11] ← R[11] | D[01]
-R[11] ← R[11] & D[01]
-R[11] ← R[11] & R[11]
-R[11] ← R[11] | D[02]
-R[11] ← R[11] | D[02]
-R[11] ← R[11] | D[02]
-R[06] ← ~ R[11]
-R[09] ← ~ D[01]
-R[05] ← ~ R[11]
-R[02] ← ~ R[06]
-R[02] ← R[02] & R[01]
-R[05] ← R[05] & D[10]
-R[05] ← R[05] | R[02]
-R[08] ← ~ R[09]
-R[03] ← ~ D[11]
-R[03] ← R[03] & R[08]
-R[05] ← R[05] & R[03]
-R[05] ← R[05] | R[02]
-R[06] ← ~ D[04]
-R[10] ← ~ R[01]
-R[07] ← ~ D[09]
-R[02] ← ~ R[06]
-R[04] ← ~ R[02]
-R[11] ← ~ R[04]
-R[06] ← ~ R[11]
-R[07] ← R[07] | D[07]
-R[01] ← R[01] | R[05]
-R[06] ← R[06] & D[03]
-R[07] ← R[07] | D[09]
-R[01] ← R[01] & R[11]
-R[10] ← R[10] & R[06]
-R[04] ← ~ R[04]
-R[07] ← R[07] | D[07]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[07] ← R[07] & D[02]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[07] ← R[07] & D[02]
-R[04] ← R[04] | D[02]
-R[07] ← R[07] | D[07]
-R[11] ← ~ R[04]
-R[04] ← ~ D[01]
-R[10] ← R[10] & R[11]
-R[11] ← R[11] | D[02]
-R[07] ← R[07] | R[07]
-R[07] ← R[07] | R[07]
-R[05] ← ~ R[11]
-R[11] ← ~ R[04]
-R[04] ← ~ R[04]
-R[07] ← R[07] & D[04]
-R[01] ← R[01] | R[05]
-R[10] ← R[10] | D[08]
-R[08] ← ~ D[04]
-R[07] ← R[07] | R[08]
-R[04] ← R[04] & R[10]
-R[06] ← ~ R[11]
-R[07] ← R[07] & D[02]
-R[11] ← R[11] & D[01]
-R[07] ← R[07] | D[07]
-R[11] ← R[11] & D[01]
-R[07] ← R[07] & R[07]
-R[11] ← R[11] | R[07]
-R[10] ← ~ R[01]
-R[04] ← R[04] | D[02]
-R[02] ← ~ R[06]
-R[06] ← ~ R[02]
-R[01] ← R[01] | R[05]
-R[06] ← R[06] & D[03]
-R[06] ← R[06] & D[03]
-R[01] ← R[01] & R[11]
-R[10] ← R[10] & R[06]
-R[04] ← ~ R[04]
-R[04] ← R[04] & R[10]
-R[04] ← R[04] | D[02]
-R[11] ← ~ R[04]
-R[11] ← R[11] | D[02]
-R[05] ← ~ R[11]
-R[01] ← R[01] | R[05]
-```
-
-We then "decompile" this linear register-transfer code into a symbolic expression, which is frequently quite hairy, so we use the `sympy` symbolic computation library to simplify it to a feasibly human-readable form.
-
-![](https://i.imgur.com/60DuNZZ.png)
-
-
-![Distribution of objective performance across the eight subpopulations](https://i.imgur.com/udbdMis.png)
-
-
-
-![Distribution of trace information across the eight subpopulations](https://i.imgur.com/r6blcOs.png)
-
-
-![Interaction matrices for the 8-to-1 Multiplexor experiment](https://i.imgur.com/6uXm7Jf.png)
+![Syntax graph of a 8-to-1 multiplexor champion](https://i.imgur.com/wYM8tDI.png)
 
