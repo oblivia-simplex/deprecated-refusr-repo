@@ -119,7 +119,7 @@ end
 
 ## See Krawiec, chapter 6
 
-function trace_consistency(trace::BitArray, answers::BitArray)
+function trace_consistency(trace, answers)
     A = map(r -> BitEntropy.conditional_entropy(answers, r), eachslice(trace, dims = 2))
     B = map(r -> BitEntropy.conditional_entropy(r, answers), eachslice(trace, dims = 2))
     minimum(A .+ B)
@@ -128,13 +128,13 @@ end
 
 OUTREG = 1
 
-function trace_hamming(trace::BitArray, answers::BitArray)
+function trace_hamming(trace, answers)
     x = view(trace, OUTREG, :, :) .⊻ answers
     (1.0 .- map(mean, eachcol(x))) |> maximum
 end
 
 
-function trace_information(trace::BitArray; answers = get_answers())
+function trace_information(trace; answers = get_answers())
     x = view(trace, OUTREG, :, :)
     map(x -> mutualinfo(answers, x), eachcol(x))
 end
@@ -210,8 +210,6 @@ function fit(geo, i)
         return [0, 0, 0]
     end
 
-    @assert g.phenotype.results isa BitArray "g is $(g), g.phenotype.results is $(g.phenotype.results |> typeof)"
-    @assert g.phenotype.trace isa BitArray "g is $(g) g.phenotype.trace is $(g.phenotype.trace |> typeof)"
 
     # We could scan the trace here, and see if the program solved the problem
     # at some intermediary stage. (max trace hamming)
