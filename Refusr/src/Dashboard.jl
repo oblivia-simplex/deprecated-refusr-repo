@@ -3,6 +3,7 @@ module Dashboard
 using ..Expressions
 using ..LinearGenotype
 using Base64
+using Cockatrice.Config
 using Cockatrice.Logging
 using Cockatrice.Logging: Logger
 using MosaicViews
@@ -706,7 +707,7 @@ function generate_main_page(config)
     config_txt = html_div(id = "config-txt") do
         html_hr(),
         html_h1("Configuration for this Experiment"),
-        html_pre("$(Cockatrice.Config.to_yaml(config))"),
+        html_pre("$(Config.to_yaml(config))"),
         html_hr(),
         html_h1("Structured Text for Reverse Engineered Function"),
         html_div(

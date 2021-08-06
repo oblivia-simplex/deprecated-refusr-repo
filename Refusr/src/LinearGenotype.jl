@@ -1,6 +1,7 @@
 module LinearGenotype
 
 using Printf
+using AxisArrays
 using Distributed
 using StatsBase
 import JSON
@@ -145,7 +146,8 @@ function to_expr(inst::Inst)
 end
 
 
-function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = true)
+function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = true,
+                 alpha_cache=true)
     DEFAULT_EXPR = false
     code = intron_free ? copy(code) : strip_introns(code, [1])
     if isempty(code)
@@ -158,14 +160,14 @@ function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = 
         lhs, rhs = e.args
         RHS = Expressions.replace(RHS, lhs => rhs)
         if incremental_simplify
-            RHS = Expressions.simplify(RHS)
+            RHS = Expressions.simplify(RHS; alpha_cache)
         end
     end
     # Since we initialize the R registers to `false`, any remaining R references
     # can be replaced with `false`.
     RHS = Expressions.replace(RHS, (e -> e isa Expr && e.args[1] == :R) => false)
     if incremental_simplify
-        return Expressions.simplify(RHS)
+        return Expressions.simplify(RHS; alpha_cache)
     else
         return RHS
     end
@@ -196,7 +198,8 @@ function effective_code(g::Creature)
     return g.chromosome[g.effective_indices]
 end
 
-function decompile(g::Creature; assign = true, incremental_simplify = true)
+function decompile(g::Creature; assign = true, incremental_simplify = true,
+                   alpha_cache = true)
     if !isnothing(g.symbolic) && assign
         return g.symbolic
     end
@@ -208,6 +211,7 @@ function decompile(g::Creature; assign = true, incremental_simplify = true)
         g.effective_code,
         intron_free = true,
         incremental_simplify = incremental_simplify,
+        alpha_cache = alpha_cache,
     )
     if assign
         g.symbolic = symbolic
@@ -431,6 +435,7 @@ function evaluate_inst_vec!(; R, D, inst)
 end
 
 
+# TODO: use axis arrays
 function execute(code, data; config, make_trace = true)::Tuple{RegType,BitArray}
     num_regs = config.genotype.registers_n
     max_steps = config.genotype.max_steps
@@ -459,6 +464,10 @@ function execute_vec(code, INPUT; config, make_trace = true)
     max_steps = config.genotype.max_steps
     trace_len = max(1, min(length(code), max_steps))
     trace = zeros(Bool, size(R)..., trace_len) |> BitArray
+    trace = AxisArray(trace,
+                      reg=1:size(trace,1),
+                      case=1:size(trace,2),
+                      pc=[(1:size(trace,3)-1)..., :end])
     steps = 0
     for (pc, inst) in enumerate(code)
         if pc > max_steps

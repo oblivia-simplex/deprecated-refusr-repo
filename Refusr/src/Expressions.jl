@@ -23,11 +23,11 @@ export replace!,
     replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
 
 
-sympy = pyimport("sympy")
+SYMPY = pyimport("sympy")
 
 
 function __init__()
-    copy!(sympy, pyimport("sympy"))
+    copy!(SYMPY, pyimport("sympy"))
 end
 
 
@@ -190,15 +190,10 @@ _simplify(e) = Espresso.simplify(e)
 #     end
 # end
 
-function make_symbols(v::Vector{String})
-    if isempty(v)
-        PyObject[]
-    elseif length(v) == 1
-        [sympy.symbols(v[1])]
-    else
-        [s for s in sympy.symbols(join(v, " "))] |> collect
-    end
+@inline function make_symbols(v::Vector{String})
+    SYMPY.symbols(v, integer=true)
 end
+
 
 function demangle(s::Symbol)
     if s == :True
@@ -230,8 +225,8 @@ demangle_helper(s::Symbol) = demangle(s)
 demangle_helper(s::Expr) = replace(s, (x -> x isa Symbol) => demangle)
 demangle_helper(s) = s
 
-simplify(b::Bool) = b
-simplify(s::Symbol) = s
+simplify(b::Bool; kwargs...) = b
+simplify(s::Symbol; kwargs...) = s
 
 Cache() = LRU{Expr,Union{Bool,Expr,Symbol}}(maxsize = 2^30, by = Base.summarysize)
 
@@ -265,26 +260,74 @@ function sympy_to_julia!(ee)
     return ee
 end
 
+#### Alpha reduction equivalence classes need this
+
+function alpha_mapping(e; letter=:α)
+    vars = variables_used(e)
+    α = [:($(letter)[$(i)]) for i in 1:length(vars)]
+    zip(vars, α)
+end
+    
+
+function rename_variables(e::Expr; letter=:α, mapping=alpha_mapping(e;letter))
+    e_α = subs(e, Dict(mapping))
+    return (e_α, mapping)
+end
+
+
+
+rename_variables(e; letter=:α, mapping=[]) = e, mapping
+
+
+function restore_variables(e::Expr, mapping)
+    subs(e, Dict((v,a) for (a,v) in mapping))
+end
+
+
+restore_variables(a, _) = a
+
+
+###################
+
 percent(a, b) = "$(round(100*a/b, digits=2))%"
 
 const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
-    function simplify_(e::Expr)::Union{Bool,Expr,Symbol}
+    function simplify_(e::Expr; alpha_cache=true, just_get_cache_stats=false, flush_cache=false)
+
+        if just_get_cache_stats
+            return (;hits, queries, cache_time)
+        end
+
+        if flush_cache
+            empty!(CACHE)
+            hits = 0
+            queries = 0
+            cache_time = 0
+            return
+        end
 
         function check_cache(e)
             if USE_CACHE
                 start_at = now()
                 queries > 0 &&
-                    @debug "Cache stats" hits queries percent(hits, queries) CACHE.currentsize percent(
+                    @debug "Cache stats" alpha_cache hits queries percent(hits, queries) CACHE.currentsize percent(
                         CACHE.currentsize,
                         CACHE.maxsize,
                     ) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
                 try
-                    result = CACHE[e]
+                    result = if alpha_cache
+                        α, mapping = rename_variables(e)
+                        result_α = CACHE[α]
+                        restore_variables(result_α, mapping)
+                    else
+                        CACHE[e]
+                    end
                     hits += 1
                     queries += 1
                     cache_time += (now() - start_at).value
                     return result
-                catch KeyError
+                catch er # KeyError
+                    @assert er isa KeyError
                     queries += 1
                     cache_time += (now() - start_at).value
                     return nothing
@@ -295,7 +338,13 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
         function cache(e, result)
             if USE_CACHE
                 start_at = now()
-                CACHE[e] = result
+                if alpha_cache
+                    e_α, mapping = rename_variables(e)
+                    result_α, _ = rename_variables(result; mapping)
+                    CACHE[e_α] = result_α
+                else
+                    CACHE[e] = result
+                end
                 cache_time += (now() - start_at).value
             end
         end
@@ -309,13 +358,17 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
 
         D = ["D$(i)" for i = 1:Dn] |> make_symbols
         R = ["R$(i)" for i = 1:Rn] |> make_symbols
+        
         #x = evalwith(julia_to_sympy!(deepcopy(e)), D=D, R=R)
         x = evalwith(e, D = D, R = R)
         #p = SymPy.simplify(x)
-        p = sympy.simplify(x)
+        p = SYMPY.simplify(x)
         # FIXME
         #s = string(p)
         s = Meta.parse(p.__repr__())
+        if s isa Expr
+            replace!(s, :^ => :⊻) # because ^ will be interpreted as exponentiation
+        end
         simple = demangle_helper(s)
         @debug "Simplified\n$(e)\nwith $(count_subexpressions(e)) subexpressions, to:\n$(simple)\nwith $(count_subexpressions(simple))..."
         cache(e, simple)
@@ -324,10 +377,15 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
     end
 end # end closure
 
-simplify(e::Expr) = __simplify(e)
+
+simplify(e::Expr; alpha_cache=true) = __simplify(e; alpha_cache)
+
+get_cache_stats() = __simplify(:(1+1), just_get_cache_stats=true)
 
 
-flush_cache!() = empty!(__simplify.CACHE)
+function flush_cache!()
+    __simplify(:(1+1), flush_cache=true)
+end
 
 
 function evalwith(g; D, R = [])
@@ -378,7 +436,7 @@ variables_used!(acc, literal::Bool) = nothing
     #    sort!(acc, by = s -> s.args[2])
     #    unique!(acc)
     #    acc
-    Espresso.find_vars(expr)
+    Espresso.find_vars(expr) |> unique
 end
 
 
@@ -710,30 +768,31 @@ end
 
 
 
-DEFAULT_NONTERMINALS = [:& => 2, :| => 2, :~ => 1]
+DEFAULT_NONTERMINALS = [:& => 2, :| => 2, :~ => 1, :⊻ => 2]
 
 
 function grow(depth, max_depth, terminals, nonterminals, bushiness)
-    ops = [terminals; nonterminals]
+    nodes = [terminals; nonterminals]
     if depth == max_depth
         return first(rand(terminals))
     end
-    op, arity = if depth > 0 && rand() > bushiness
-        Symbol(rand(ops))
+    node, arity = if depth > 0 && rand() > bushiness
+        rand(nodes)
     else
         rand(nonterminals)
     end
     if iszero(arity)
-        return op
+        return node
     end
     args = [grow(depth + 1, max_depth, terminals, nonterminals, bushiness) for _ = 1:arity]
-    return Expr(:call, op, args...)
+    return Expr(:call, Symbol(node), args...)
 end
 
 
 function grow(
     max_depth;
-    terminals = [],
+    num_terminals = max_depth,
+    terminals = generate_terminals(num_terminals),
     nonterminals = DEFAULT_NONTERMINALS,
     bushiness = 0.8,
 )
