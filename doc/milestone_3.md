@@ -258,7 +258,7 @@ When this function terminates, the only remaining variables in the expression wi
 
 ## Simplifying Symbolic Expression Trees
 
-The expressions generated from linear programs in this fashion have the unfortunate property that they tend to rapidly grow in complexity, becoming tarpits into which computational resources can be sunk, and unreadable thickets of parentheses that offer little insight to the subject area expert who might be hoping to use such formulas to assist in reverse engineering a black-boxed function.
+The expressions generated from linear programs in this fashion tend to rapidly grow in complexity, becoming tarpits into which computational resources can be sunk, and unreadable thickets of parentheses that offer little insight to the subject area expert who might be hoping to use such formulas to assist in reverse engineering a black-boxed function.
 
 Fortunately, expression rewriting and simplification tools have existed for decades, and there's no reason to reinvent this particular wheel from scratch. Like many of the other ReMath teams, the REFUSR project has converged on the Python symbolic mathematics library, [SymPy](https://www.sympy.org/en/index.html). SymPy's interoperation with our primarily Julia codebase isn't seamless, but we were greatly assisted by the PyCall API in this regard. All that remained was to write a little bit of translation code to allow Julia expressions to be translated into SymPy expressions (a proper subset of Python expressions) and back, and to implement the optimizations that would make this tool usable for us -- culminating in an $\alpha$-reduction invariant expression cache.
 
@@ -463,6 +463,26 @@ REFUSR also emits a graphical representation of these simplified expressions, wh
 
 ![Syntax graph of a 4-to-1 multiplexor specimen](https://i.imgur.com/pMbBw3b.png)
 
+### Performance Benchmarks
+
+TODO: Say something about this. Alpha invariant caching only pays for itself once program complexity has reached a certain level. Try this again with mux 8-to-1?
+
+![](https://i.imgur.com/euXfU7U.png)
+
+![](https://i.imgur.com/1D4zPqC.png)
+
+![](https://i.imgur.com/kWfCaPS.png)
+
+![](https://i.imgur.com/mUgcMwO.png)
+
+8-to-1 MUX:
+
+![](https://i.imgur.com/SESNqLp.png)
+![](https://i.imgur.com/PGjzLtl.png)
+![](https://i.imgur.com/JKDk3fJ.png)
+![](https://i.imgur.com/vCgbHml.png)
+![](https://i.imgur.com/EnYlCAy.png)
+
 
 ## The Use of Execution Trace Information
 
@@ -508,8 +528,9 @@ Our algorithm differs only in the choice of the crossover points $i$ and $j$. Ra
 
 The idea here is that we thereby increase the odds of chosing a particularly "fruitful" site for recombination, breaking each genotype at a site where it was potentially "on the right track", and cutting away from the genome sites where information is unduly destroyed.
 
+It is currently unclear if this strategy will have any noteworthy effects on performance. The most recent batch of experiments, where the two crossover strategies were each employed in 8 trials of the 4-to-1 multiplexor experiment (with fitness sharing), returned inconclusive results.
 
-
+![Chromosome weighting trials: inconclusive results](https://i.imgur.com/V0MCGfu.png)
 
 ## Implicit Fitness Sharing and Interaction Matrices
 
@@ -563,3 +584,16 @@ It has only been with fitness sharing, moreover, that we have been able to solve
 
 ![Syntax graph of a 8-to-1 multiplexor champion](https://i.imgur.com/wYM8tDI.png)
 
+### Applying Informational Crossover Weighting to the 8-to-1 MUX Problem
+
+Though we have not yet run a statistically significant number of trials, we have seen some indications the informational weighting of crossover point distributions _may_ accelerate the search for targets as complex as the 8-to-1 MUX. In recent experiments we have been able to discover the target function in approximately half the number of tournaments that were generally necessary in populations unaided by informational crossover weighting.
+
+![8-to-1 MUX experiment with informational crossover point weighting](https://i.imgur.com/kw3homN.png)
+
+
+
+# Next Steps: System Integration
+
+The primary goal of Phase 2 will be to integrate these three modules into a cohesive system. The Refuduino PLC whisperer will allow us to rapidly probe a black boxed PLC device with crafted inputs and record its behaviour. The probabilistic property tester (PPT) will determine _which_ inputs can provide us with the best evidence for various semantic properties. Those properties will then be translated into constraints that will be used to guide the Cockatrice genetic search, while the PPT aids in the selection of input samples for functions too complex for their truth tables to be exhaustively enumerated.
+
+![Integration plan](https://i.imgur.com/G8n5oZ0.jpg)
