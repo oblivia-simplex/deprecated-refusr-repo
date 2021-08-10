@@ -53,7 +53,7 @@ DEFAULT_CONFIG_FIELDS = [
     ["selection", "lexical"] => true,
     ["logging", "dir"] => "$(ENV["HOME"])/logs/refusr/",
     ["genotype", "weight_crossover_points"] => true,
-    ["genotype", "ops"] => [:|, :&, :~, :mov],
+    ["genotype", "ops"] => "| & ~ mov",
 ]
 
 function prep_config(path)

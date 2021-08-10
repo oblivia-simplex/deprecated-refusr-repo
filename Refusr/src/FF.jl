@@ -74,7 +74,7 @@ unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
 
 # Only defined for Linear Genotypes for now
 # returns a 2d array of intermediate results
-intermediate_results(trace) = vcat([transpose(tr[1, :]) for tr in trace]...)
+intermediate_results(trace) = vcat([transpose(tr[reg=1]) for tr in trace]...)
 
 intermediate_hamming(answers, trace) =
     map(c -> get_hamming(answers, c), eachcol(intermediate_results(trace)))

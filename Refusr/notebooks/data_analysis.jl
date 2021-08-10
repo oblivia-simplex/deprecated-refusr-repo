@@ -176,6 +176,12 @@ end
 	
 	
 
+# ╔═╡ 81ba5340-abf7-4c59-84d1-0f64c3a219af
+DATA_WEIGHTED = assemble_reports(log_dirs=["$(ENV["HOME"])/logs/refusr/2021/08/06"], tag="2MUX-with-sharing-weighted", cap=8)
+
+# ╔═╡ eb01c9f0-20cd-46ff-a3c8-75bc93ad0446
+DATA_UNWEIGHTED = assemble_reports(log_dirs=["$(ENV["HOME"])/logs/refusr/2021/08/06"], tag="2MUX-with-sharing-unweighted", cap=8)
+
 # ╔═╡ 0566d86b-f205-490a-aed3-748aa3e43a58
 DATA_SHARING = assemble_reports(tag="2MUX-with-sharing", cap=18)
 
@@ -215,6 +221,18 @@ p2 = mass_plot(DATA_SHARING, "with Fitness Sharing", :algae)
 # ╔═╡ c2550683-c2ea-46e7-b976-7ded0e060383
 plot(p1, p2)
 
+# ╔═╡ b3e79e9c-69fd-4287-a2a7-62d8b28f534c
+pw = mass_plot(DATA_WEIGHTED, "with chromosome weighting", :algae)
+
+# ╔═╡ 21002b43-e9ce-4972-a5ea-fb3db003432b
+pu = mass_plot(DATA_UNWEIGHTED, "without chromosome weighting", :deep)
+
+# ╔═╡ 9cce63ac-1c31-4fa4-a7a7-65076e9499de
+plot(pu, pw)
+
+# ╔═╡ f627d14b-396d-4654-b516-824dd1fc036a
+
+
 # ╔═╡ c1ada39b-902b-459f-8df4-fc85557c3259
 function summary_for_df(df)
 	w = filter(m -> m <= max_iter, df[df.objective_maximum .== 1.0, :].iteration_mean)
@@ -236,6 +254,15 @@ summ_no_share.num_winners / 18
 
 # ╔═╡ 817b8e69-507b-4087-83fa-df8d7cc902b3
 summ_share.mean_win_at / summ_no_share.mean_win_at 
+
+# ╔═╡ 31d906ec-9d1b-4a57-9638-97d6f1c8dbed
+summ_weighted = summary_for_df(DATA_WEIGHTED)
+
+# ╔═╡ f650ad68-c676-48a0-87e5-9cc33a4659f6
+summ_unweighted = summary_for_df(DATA_UNWEIGHTED)
+
+# ╔═╡ 514f856f-4b10-4dd9-86c2-12ad7a174a8d
+
 
 # ╔═╡ 8a27dd38-15b5-4065-a5cf-5ebb19c9196e
 md"## Poking at specimens"
@@ -413,6 +440,8 @@ specimens = Cockatrice.Logging.list_specimen_files(data_dir)
 # ╠═d5e08ed1-9956-4fe4-872f-cab86e687f62
 # ╠═b238a0a0-19b1-4e8d-80ca-a8cd6394fd29
 # ╠═8705758f-9bf2-4efc-8da5-d54e65d06f44
+# ╠═81ba5340-abf7-4c59-84d1-0f64c3a219af
+# ╠═eb01c9f0-20cd-46ff-a3c8-75bc93ad0446
 # ╠═0566d86b-f205-490a-aed3-748aa3e43a58
 # ╠═4d446dab-c7e7-492d-a1fe-4fbb3754fd69
 # ╠═189ee3ab-af82-4cac-8017-4a2d0739d615
@@ -425,11 +454,18 @@ specimens = Cockatrice.Logging.list_specimen_files(data_dir)
 # ╠═22e528e0-b32e-4244-ba04-faa4d9f9082f
 # ╠═83831f41-516b-45e3-92af-752fa1efe8f1
 # ╠═c2550683-c2ea-46e7-b976-7ded0e060383
+# ╠═b3e79e9c-69fd-4287-a2a7-62d8b28f534c
+# ╠═21002b43-e9ce-4972-a5ea-fb3db003432b
+# ╠═9cce63ac-1c31-4fa4-a7a7-65076e9499de
+# ╠═f627d14b-396d-4654-b516-824dd1fc036a
 # ╠═c1ada39b-902b-459f-8df4-fc85557c3259
 # ╠═a0571bfd-a2f8-4888-b7b1-13935b1372e0
 # ╠═badb0449-2df0-42d0-ade8-56dc2727ce19
 # ╠═a23b08e5-a4be-4331-92cd-e22267fe7a02
 # ╠═817b8e69-507b-4087-83fa-df8d7cc902b3
+# ╠═31d906ec-9d1b-4a57-9638-97d6f1c8dbed
+# ╠═f650ad68-c676-48a0-87e5-9cc33a4659f6
+# ╠═514f856f-4b10-4dd9-86c2-12ad7a174a8d
 # ╠═8a27dd38-15b5-4065-a5cf-5ebb19c9196e
 # ╠═9c26cc8d-503c-427c-969e-4b273f67139f
 # ╠═767efe15-9ad8-47bb-8f18-7e7947897a11

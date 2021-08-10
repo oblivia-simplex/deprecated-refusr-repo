@@ -16,6 +16,7 @@ using ..Expressions
 
 
 const RegType = Bool
+const Exp = Expressions
 
 const mov = identity
 
@@ -131,6 +132,9 @@ end
 
 
 function to_expr(inst::Inst)
+    # ad hoc check for boolean value
+    if inst.op == xor && inst.src == inst.dst return false end
+    ## factor this out if other ops with this property are added
     op = nameof(inst.op)
     dst = :(R[$(inst.dst)])
     src_t = inst.src < 0 ? :D : :R
@@ -147,7 +151,7 @@ end
 
 
 function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = true,
-                 alpha_cache=true)
+                 alpha_cache=true, threshold=5)
     DEFAULT_EXPR = false
     code = intron_free ? copy(code) : strip_introns(code, [1])
     if isempty(code)
@@ -159,8 +163,13 @@ function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = 
         e = pop!(code) |> to_expr
         lhs, rhs = e.args
         RHS = Expressions.replace(RHS, lhs => rhs)
-        if incremental_simplify
-            RHS = Expressions.simplify(RHS; alpha_cache)
+
+        if incremental_simplify && count_subexpressions(RHS) > threshold
+            # We only need to simplify again if rhs has common variables with RHS minus lhs
+            RHS_minus_lhs = Exp.replace(RHS, lhs => :XYZZY)
+            if rhs isa Bool || Exp.shares_variables(RHS_minus_lhs, rhs)
+                RHS = Exp.simplify(RHS; alpha_cache)
+            end
         end
     end
     # Since we initialize the R registers to `false`, any remaining R references
@@ -198,7 +207,9 @@ function effective_code(g::Creature)
     return g.chromosome[g.effective_indices]
 end
 
-function decompile(g::Creature; assign = true, incremental_simplify = true,
+function decompile(g::Creature; assign = true,
+                   incremental_simplify = true,
+                   simplify = !incremental_simplify,
                    alpha_cache = true)
     if !isnothing(g.symbolic) && assign
         return g.symbolic
@@ -213,6 +224,9 @@ function decompile(g::Creature; assign = true, incremental_simplify = true,
         incremental_simplify = incremental_simplify,
         alpha_cache = alpha_cache,
     )
+    if simplify
+        symbolic = Expressions.simplify(symbolic)
+    end
     if assign
         g.symbolic = symbolic
     end
@@ -475,7 +489,7 @@ function execute_vec(code, INPUT; config, make_trace = true)
         end
         evaluate_inst_vec!(R = R, D = D, inst = inst)
         if make_trace
-            trace[:, :, pc] .= R
+            trace[pc=pc] = R
         end
         steps += 1
     end
