@@ -95,7 +95,7 @@ config_path = "/tmp/config.yaml"
 write(config_path, config)
 
 # ╔═╡ 516ee454-1f0a-4af3-a4c5-c0aef89138e7
-evoL = mkevo(config_path)
+evoL = mkevo()
 
 # ╔═╡ afd46187-e022-495e-ba85-12dd0faf0b59
 NAIVE_CACHE = LRU{String, Union{Bool, Expr, Symbol}}(maxsize=2^20, by=Base.summarysize)
@@ -248,6 +248,9 @@ D = vcat([[(tournament=c.tournament,
 vcat(C1000dict[1]["simple_depth"]...)
 
 # ╔═╡ 0944f9e7-f9e3-4d88-8679-ffd2b5039b59
+md"# Benchmark Plots"
+
+# ╔═╡ 924f0373-1530-444b-aa83-969dfc8dbe3b
 
 
 # ╔═╡ Cell order:
@@ -291,3 +294,4 @@ vcat(C1000dict[1]["simple_depth"]...)
 # ╠═c59ec03e-71a5-49d2-8347-9910736a85ac
 # ╠═7101aea0-3b2b-44da-bb92-61ed96696255
 # ╠═0944f9e7-f9e3-4d88-8679-ffd2b5039b59
+# ╠═924f0373-1530-444b-aa83-969dfc8dbe3b

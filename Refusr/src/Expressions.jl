@@ -194,6 +194,9 @@ _simplify(e) = Espresso.simplify(e)
     SYMPY.symbols(v, integer=true)
 end
 
+@inline function make_symbols(letter, number)
+    SYMPY.symbols(["$(letter)$(i)" for i in 1:number], integer=true)
+end
 
 function demangle(s::Symbol)
     if s == :True
@@ -237,7 +240,7 @@ DiagramCache() = LRU{Tuple{Expr,Bool,Symbol},Union{String,Vector{UInt8}}}(
 
 USE_CACHE = true
 
-function _use_cache(b::Bool)
+function _use_cache!(b::Bool)
     global USE_CACHE
     USE_CACHE = b
 end
@@ -274,8 +277,6 @@ function rename_variables(e::Expr; letter=:α, mapping=alpha_mapping(e;letter))
     return (e_α, mapping)
 end
 
-
-
 rename_variables(e; letter=:α, mapping=[]) = e, mapping
 
 
@@ -290,6 +291,29 @@ restore_variables(a, _) = a
 ###################
 
 percent(a, b) = "$(round(100*a/b, digits=2))%"
+
+
+function as_sympy_expr(e)
+    Dn = variables_used_upper_bound(e, :D)
+    Rn = variables_used_upper_bound(e, :R)
+
+    D = make_symbols(:D, Dn)
+    R = make_symbols(:R, Rn)
+ 
+    #x = evalwith(julia_to_sympy!(deepcopy(e)), D=D, R=R)
+    evalwith(e, D = D, R = R)
+end
+
+
+# translate from sympy to julia
+function as_julia_expr(p)
+    s = Meta.parse(p.__repr__())
+    if s isa Expr
+        replace!(s, :^ => :⊻) # because ^ will be interpreted as exponentiation
+    end
+    demangle_helper(s)
+end
+
 
 const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
     function simplify_(e::Expr; alpha_cache=true, just_get_cache_stats=false, flush_cache=false)
@@ -310,10 +334,14 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
             if USE_CACHE
                 start_at = now()
                 queries > 0 &&
-                    @debug "Cache stats" alpha_cache hits queries percent(hits, queries) CACHE.currentsize percent(
-                        CACHE.currentsize,
-                        CACHE.maxsize,
-                    ) ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+                    @debug("Cache stats",
+                           alpha_cache,
+                           hits,
+                           queries,
+                           percent(hits, queries),
+                           CACHE.currentsize,
+                           percent(CACHE.currentsize, CACHE.maxsize),
+                           ((1000 * cache_time / queries) |> ceil |> Nanosecond))
                 try
                     result = if alpha_cache
                         α, mapping = rename_variables(e)
@@ -352,25 +380,10 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
         res = check_cache(e)
         !isnothing(res) && return res
 
+        simple = as_sympy_expr(e) |> SYMPY.simplify |> as_julia_expr
 
-        Rn = variables_used_upper_bound(e, :R)
-        Dn = variables_used_upper_bound(e, :D)
-
-        D = ["D$(i)" for i = 1:Dn] |> make_symbols
-        R = ["R$(i)" for i = 1:Rn] |> make_symbols
-        
-        #x = evalwith(julia_to_sympy!(deepcopy(e)), D=D, R=R)
-        x = evalwith(e, D = D, R = R)
-        #p = SymPy.simplify(x)
-        p = SYMPY.simplify(x)
-        # FIXME
-        #s = string(p)
-        s = Meta.parse(p.__repr__())
-        if s isa Expr
-            replace!(s, :^ => :⊻) # because ^ will be interpreted as exponentiation
-        end
-        simple = demangle_helper(s)
         @debug "Simplified\n$(e)\nwith $(count_subexpressions(e)) subexpressions, to:\n$(simple)\nwith $(count_subexpressions(simple))..."
+
         cache(e, simple)
 
         return simple
@@ -404,9 +417,12 @@ function generate_input_variables(num)
     [:(D[$i]) for i = 1:num]
 end
 
-function generate_terminals(num)
+function generate_terminals(num; include_constants=false)
     input = generate_input_variables(num)
-    terminals = [t => 0 for t in [input..., true, false]]
+    terminals = [t => 0 for t in [input...]]
+    if include_constants
+        push!(terminals, true => 0, false => 0)
+    end
     return terminals
 end
 
@@ -418,25 +434,14 @@ end
 
 
 
-function variables_used!(acc, expr::Expr)
-    if expr.head === :ref
-        push!(acc, expr)
-    else
-        for x in expr.args[2:end]
-            variables_used!(acc, x)
-        end
-    end
-end
-
-variables_used!(acc, literal::Bool) = nothing
 
 @inline function variables_used(expr)
-    #    acc = []
-    #    variables_used!(acc, expr)
-    #    sort!(acc, by = s -> s.args[2])
-    #    unique!(acc)
-    #    acc
     Espresso.find_vars(expr) |> unique
+end
+
+
+function shares_variables(e1, e2)::Bool
+    intersect(variables_used(e1), variables_used(e2)) |> isempty
 end
 
 
