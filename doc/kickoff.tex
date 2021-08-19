@@ -1,4 +1,4 @@
-% Created 2021-01-25 Mon 18:16
+% Created 2021-01-26 Tue 15:51
 % Intended LaTeX compiler: pdflatex
 \documentclass[presentation]{beamer}
 \usepackage[utf8]{inputenc}
@@ -34,11 +34,11 @@
 
 
 
-\begin{frame}[label={sec:org3fe3a30}]{Statement of the Problem}
+\begin{frame}[label={sec:org0195ba4}]{Statement of the Problem}
 Given a cyberphysical implementation (CPI) of an unknown Boolean function, find a symbolic specification of that function.
 \end{frame}
 
-\begin{frame}[label={sec:org2a353f0}]{Our Strategy}
+\begin{frame}[label={sec:orgb80416c}]{Our Strategy}
 \begin{itemize}
 \item If we consider the CPI as a \alert{black box}, then, so long as we can execute the CPI, and generate a set of data points, then this looks like a problem of \alert{symbolic regression}.
 \item Even as a black box, it has an advantage over a static set of data points: it can be queried as an oracle. So we can \alert{probe} it with crafted inputs, so as to better infer its properties (probabilistic property testing).
@@ -49,13 +49,13 @@ Given a cyberphysical implementation (CPI) of an unknown Boolean function, find 
 
 
 
-\begin{frame}[label={sec:org7bf07df}]{Cyberphysical Target: The ACE 11 PLC}
+\begin{frame}[label={sec:orgf688650}]{Cyberphysical Target: The ACE 11 PLC}
 \begin{center}
 \includegraphics[width=.9\linewidth]{./img/Ace11.png}
 \end{center}
 \end{frame}
 
-\begin{frame}[label={sec:orge85f061}]{Cyberphysical Target: The ACE 11 PLC}
+\begin{frame}[label={sec:org97a0077}]{Cyberphysical Target: The ACE 11 PLC}
 \begin{itemize}
 \item Small, inexpensive programmable logic controller
 \item Programmable by Modbus over USB
@@ -68,11 +68,11 @@ Given a cyberphysical implementation (CPI) of an unknown Boolean function, find 
 \end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:org0d0b141}]{Domain}
+\begin{frame}[label={sec:org7d41a0c}]{Domain}
 In the initial phase of our research, we are restricting our focus to \alert{Boolean functions}, as implemented on the ACE 11 programmable logic controller.
 \end{frame}
 
-\begin{frame}[label={sec:orge05b1e6}]{Boolean Symbolic Expressions as Genotypes}
+\begin{frame}[label={sec:org97f646b}]{Boolean Symbolic Expressions as Genotypes}
 We are searching for human-readable, formal specifications of Boolean functions, in the form of symbolic expression trees.
 
 \begin{center}
@@ -82,7 +82,7 @@ We are searching for human-readable, formal specifications of Boolean functions,
 So we initialize a population of random Boolean expressions.
 \end{frame}
 
-\begin{frame}[label={sec:orge1f5206}]{Symbolic Regression through Genetic Programming}
+\begin{frame}[label={sec:orgba15751}]{Symbolic Regression through Genetic Programming}
 Our methodological starting point will be to build a genetic programming (GP) system for symbolic regression.
 
 \begin{itemize}
@@ -95,7 +95,7 @@ Our methodological starting point will be to build a genetic programming (GP) sy
 \end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:org60dbae9}]{An Alternative to Tournament Selection: Lexicase Selection}
+\begin{frame}[label={sec:org5dd13c3}]{An Alternative to Tournament Selection: Lexicase Selection}
 Here, we are dealing with what Lee Spector and Thomas Helmuth have called an ``uncompromising problem'',
 
 \begin{quote}
@@ -105,7 +105,7 @@ a problem for which it is not acceptable for a solution to perform sub-optimally
 Helmuth and Spector have shown that for many such problems, their technique of \alert{lexicase selection} outperforms \alert{tournament selection}.
 \end{frame}
 
-\begin{frame}[label={sec:org1f58148},fragile]{Lexicase Selection}
+\begin{frame}[label={sec:org8b6ee2a},fragile]{Lexicase Selection}
  \begin{verbatim}
 1) Initialize:
    a) Set CANDIDATES to be the entire population.
@@ -128,27 +128,25 @@ Helmuth and Spector have shown that for many such problems, their technique of \
 
 
 
-\begin{frame}[label={sec:org2843ee4}]{Opening the Black Box}
-So far, we have been treating the problem of recovering symbolic mathematical specifications from implementations as a \alert{black box} problem, where all we have at our disposal is a set of the black box's inputs and outputs.
-
-But in doing so we leave a tremendous amount of information on the table.
-
-How can we put this additional information to use?
+\begin{frame}[label={sec:orga905f54}]{Opening the Black Box}
+\begin{itemize}
+\item So far, we have been treating the problem of recovering symbolic mathematical specifications from implementations as a \alert{black box} problem, where all we have at our disposal is a set of the black box's inputs and outputs.
+\item But in doing so we leave a tremendous amount of information on the table.
+\item How can we put this additional information to use?
+\end{itemize}
 \end{frame}
 
 
-\begin{frame}[label={sec:org2236ccb}]{Constraint-Driven Genetic Programming (CDGP)}
+\begin{frame}[label={sec:orgd93e005}]{Constraint-Driven Genetic Programming (CDGP)}
 \begin{itemize}
 \item Technique developed by Iwo Błądek and Kryzysztof Krawiec (see their 2019 paper, ``Solving Symbolic Regression Problems with Formal Constraints'').
-\begin{itemize}
 \item Begin by creating an initial set of tests \alert{T} that any solution must pass: generate a random set of inputs for \emph{f} and collecting the outputs.
 \item Establish a set of formal properties \alert{C} that \emph{f} is either certain or highly likely to satisfy.
 \item Generate an initial population of symbolic expressions, \alert{P}, each of which expresses a Boolean function of \emph{n} variables.
 \end{itemize}
-\end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:org037cffe}]{Constraint-Driven Genetic Programming (cont.)}
+\begin{frame}[label={sec:org0c2f115}]{Constraint-Driven Genetic Programming (cont.)}
 \begin{itemize}
 \item Perform tournament or lexicase selection on \alert{P}, to select a mating pair.
 \item Enlist an SMT solver (Z3, for instance) to attempt to generate an input that, when passed to our selected candidates, violates one or more of the constraints in \alert{C}.
@@ -156,14 +154,14 @@ How can we put this additional information to use?
 \end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:orgfbc3227}]{Constraint-Driven Genetic Programming (cont.)}
+\begin{frame}[label={sec:org130444a}]{Constraint-Driven Genetic Programming (cont.)}
 \begin{itemize}
 \item If, for some candidate \alert{x}, no such counterexample can be found, and \emph{all} of the tests in \alert{T} have been passed without any errors, then we are finished: the symbolic expression \alert{x} can be taken as a probable specification for the function implemented in \emph{f}.
 \item So long as this is not the case, we apply one or more genetic operators (crossover, mutation) to the winning candidates, and insert the resulting offspring into \alert{P}, replacing whichever individuals were first eliminated by the lexicase selection process.
 \end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:org6217455}]{Constraint-Driven Genetic Programming (cont.)}
+\begin{frame}[label={sec:orgeff130f}]{Constraint-Driven Genetic Programming (cont.)}
 \begin{itemize}
 \item We repeat the process until a solution is found.
 \item Once a solution has been found, we test it against a fresh battery of input/output pairs (datapoints) generated by \emph{f}, to better gauge the accuracy of our search. In any inaccuracies are detected, the discriminating tests are appended to \alert{T}, and we resume the search. If not, we consider the search complete.
@@ -173,7 +171,7 @@ How can we put this additional information to use?
 \end{block}
 \end{frame}
 
-\begin{frame}[label={sec:orgbdfd6cb}]{Probabilistic Property Testing}
+\begin{frame}[label={sec:orgf9313d4}]{Probabilistic Property Testing}
 \begin{itemize}
 \item Since we have at our disposal not merely a subset of the target function's graph, but the implementation itself, we can employ this implementation as an ``oracle''. We can feed it any input we like and record its output.
 
@@ -186,7 +184,7 @@ How can we put this additional information to use?
 \end{frame}
 
 
-\begin{frame}[label={sec:org00a1631}]{Static Program Analysis}
+\begin{frame}[label={sec:org80327d4}]{Static Program Analysis}
 \begin{itemize}
 \item A wealth of information about the structure of \emph{f} can be obtained through traditional static binary analysis.
 \item By constructing and inspecting the \emph{data-flow graph} (DFG) for \emph{f}, for instance, we are able to determine which parameters contribute to value of \emph{f}.
@@ -194,7 +192,7 @@ How can we put this additional information to use?
 \end{itemize}
 \end{frame}
 
-\begin{frame}[label={sec:org81de236}]{Summary}
+\begin{frame}[label={sec:org624c78c}]{Summary}
 \begin{itemize}
 \item Our approach to formula recovery goes from \alert{outside} to \alert{inside}, rather than the reverse.
 \item This provides a degree of robustness against code obfuscation, since the \alert{execution behaviour} of the implementation is our primary source of information.

@@ -4,6 +4,7 @@ using Printf
 using AxisArrays
 using Distributed
 using StatsBase
+using FunctionWrappers: FunctionWrapper
 import JSON
 import Base.isequal
 
@@ -499,6 +500,13 @@ end
 
 function evaluate_vectoral(code; INPUT::BitArray, config::NamedTuple, make_trace = true)
     execute_vec(code, INPUT, config = config, make_trace = make_trace)
+end
+
+
+function compile_chromosome(code; config)
+    eff_ind = get_effective_indices(code, [1])
+    eff = code[eff_ind]
+    (data -> execute(eff, data, config=config)[1]) |> FunctionWrapper{Bool, Tuple{Union{BitVector, Vector{Bool}}}}
 end
 
 
