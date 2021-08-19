@@ -460,6 +460,13 @@ function compile_expression(expr::Expr)
 end
 
 
+function compile_expression(b::Bool)
+    (_ -> b) |> FunctionWrapper{Bool, Tuple{Vector{Bool}}}
+end
+
+
+
+
 function variables_used_upper_bound(expr, letter = :D)
     v = [a.args[2] for a in variables_used(expr) if a.args[1] == letter]
     isempty(v) ? 0 : maximum(v)
