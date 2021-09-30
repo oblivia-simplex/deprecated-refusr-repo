@@ -191,11 +191,11 @@ _simplify(e) = Espresso.simplify(e)
 # end
 
 @inline function make_symbols(v::Vector{String})
-    SYMPY.symbols(v, integer=true)
+    SYMPY.symbols(v, integer = true)
 end
 
 @inline function make_symbols(letter, number)
-    SYMPY.symbols(["$(letter)$(i)" for i in 1:number], integer=true)
+    SYMPY.symbols(["$(letter)$(i)" for i = 1:number], integer = true)
 end
 
 function demangle(s::Symbol)
@@ -265,23 +265,23 @@ end
 
 #### Alpha reduction equivalence classes need this
 
-function alpha_mapping(e; letter=:α)
+function alpha_mapping(e; letter = :α)
     vars = variables_used(e)
-    α = [:($(letter)[$(i)]) for i in 1:length(vars)]
+    α = [:($(letter)[$(i)]) for i = 1:length(vars)]
     zip(vars, α)
 end
-    
 
-function rename_variables(e::Expr; letter=:α, mapping=alpha_mapping(e;letter))
+
+function rename_variables(e::Expr; letter = :α, mapping = alpha_mapping(e; letter))
     e_α = subs(e, Dict(mapping))
     return (e_α, mapping)
 end
 
-rename_variables(e; letter=:α, mapping=[]) = e, mapping
+rename_variables(e; letter = :α, mapping = []) = e, mapping
 
 
 function restore_variables(e::Expr, mapping)
-    subs(e, Dict((v,a) for (a,v) in mapping))
+    subs(e, Dict((v, a) for (a, v) in mapping))
 end
 
 
@@ -299,7 +299,7 @@ function as_sympy_expr(e)
 
     D = make_symbols(:D, Dn)
     R = make_symbols(:R, Rn)
- 
+
     #x = evalwith(julia_to_sympy!(deepcopy(e)), D=D, R=R)
     evalwith(e, D = D, R = R)
 end
@@ -316,10 +316,15 @@ end
 
 
 const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
-    function simplify_(e::Expr; alpha_cache=true, just_get_cache_stats=false, flush_cache=false)
+    function simplify_(
+        e::Expr;
+        alpha_cache = true,
+        just_get_cache_stats = false,
+        flush_cache = false,
+    )
 
         if just_get_cache_stats
-            return (;hits, queries, cache_time)
+            return (; hits, queries, cache_time)
         end
 
         if flush_cache
@@ -333,15 +338,16 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
         function check_cache(e)
             if USE_CACHE
                 start_at = now()
-                queries > 0 &&
-                    @debug("Cache stats",
-                           alpha_cache,
-                           hits,
-                           queries,
-                           percent(hits, queries),
-                           CACHE.currentsize,
-                           percent(CACHE.currentsize, CACHE.maxsize),
-                           ((1000 * cache_time / queries) |> ceil |> Nanosecond))
+                queries > 0 && @debug(
+                    "Cache stats",
+                    alpha_cache,
+                    hits,
+                    queries,
+                    percent(hits, queries),
+                    CACHE.currentsize,
+                    percent(CACHE.currentsize, CACHE.maxsize),
+                    ((1000 * cache_time / queries) |> ceil |> Nanosecond)
+                )
                 try
                     result = if alpha_cache
                         α, mapping = rename_variables(e)
@@ -391,13 +397,13 @@ const __simplify = let CACHE = Cache(), hits = 0, queries = 0, cache_time = 0
 end # end closure
 
 
-simplify(e::Expr; alpha_cache=true) = __simplify(e; alpha_cache)
+simplify(e::Expr; alpha_cache = true) = __simplify(e; alpha_cache)
 
-get_cache_stats() = __simplify(:(1+1), just_get_cache_stats=true)
+get_cache_stats() = __simplify(:(1 + 1), just_get_cache_stats = true)
 
 
 function flush_cache!()
-    __simplify(:(1+1), flush_cache=true)
+    __simplify(:(1 + 1), flush_cache = true)
 end
 
 
@@ -417,7 +423,7 @@ function generate_input_variables(num)
     [:(D[$i]) for i = 1:num]
 end
 
-function generate_terminals(num; include_constants=false)
+function generate_terminals(num; include_constants = false)
     input = generate_input_variables(num)
     terminals = [t => 0 for t in [input...]]
     if include_constants
@@ -461,7 +467,7 @@ end
 
 
 function compile_expression(b::Bool)
-    (_ -> b) |> FunctionWrapper{Bool, Tuple{Vector{Bool}}}
+    (_ -> b) |> FunctionWrapper{Bool,Tuple{Vector{Bool}}}
 end
 
 
@@ -473,7 +479,7 @@ function variables_used_upper_bound(expr, letter = :D)
 end
 
 
-function truth_table(expr; width = nothing, samplesize::Union{Symbol,Int} = :ALL)
+function truth_table(expr; width = nothing, samplesize::Union{Symbol,Float64,Int} = :ALL)
     # Sampling without replacement fails when the sample ranges over integers larger
     # than 64 bits in width
     program = compile_expression(expr)

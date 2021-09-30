@@ -576,8 +576,7 @@ function make_specimen_dropdown_options(specimen_files::Vector)
     mklabel(d) =
         """Island $(d["isle"]), Generation $(d["gen"]): $(d["name"]), performance: $(d["perf"])"""
     pre = [
-        (label_info = Logging.parse_specimen_filename(f), value = f) for
-        f in specimen_files
+        (label_info = Logging.parse_specimen_filename(f), value = f) for f in specimen_files
     ]
     sort!(pre, by = p -> p[1]["perf"], rev = true)
     [(label = mklabel(p.label_info), value = p.value) for p in pre]
