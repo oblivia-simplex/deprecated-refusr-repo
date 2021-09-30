@@ -47,7 +47,7 @@ end
 #     #    (truth, 0),
 #     #    (falsity, 0), 
 # ]
- 
+
 
 struct Inst
     op::Function
@@ -60,8 +60,7 @@ end
 ## How many possible Insts are there, for N inputs?
 ## Where there are N inputs, there are 2N possible src values and N possible dst
 ## arity is fixed with op, so there are 4 possible op values
-number_of_possible_insts(n_input, n_reg; ops) =
-    n_input * (n_input + n_reg) * length(ops)
+number_of_possible_insts(n_input, n_reg; ops) = n_input * (n_input + n_reg) * length(ops)
 
 
 function number_of_possible_programs(n_input, n_reg, max_len)
@@ -134,7 +133,9 @@ end
 
 function to_expr(inst::Inst)
     # ad hoc check for boolean value
-    if inst.op == xor && inst.src == inst.dst return false end
+    if inst.op == xor && inst.src == inst.dst
+        return false
+    end
     ## factor this out if other ops with this property are added
     op = nameof(inst.op)
     dst = :(R[$(inst.dst)])
@@ -151,8 +152,13 @@ function to_expr(inst::Inst)
 end
 
 
-function to_expr(code::Vector{Inst}; intron_free = true, incremental_simplify = true,
-                 alpha_cache=true, threshold=5)
+function to_expr(
+    code::Vector{Inst};
+    intron_free = true,
+    incremental_simplify = true,
+    alpha_cache = true,
+    threshold = 5,
+)
     DEFAULT_EXPR = false
     code = intron_free ? copy(code) : strip_introns(code, [1])
     if isempty(code)
@@ -208,10 +214,13 @@ function effective_code(g::Creature)
     return g.chromosome[g.effective_indices]
 end
 
-function decompile(g::Creature; assign = true,
-                   incremental_simplify = true,
-                   simplify = !incremental_simplify,
-                   alpha_cache = true)
+function decompile(
+    g::Creature;
+    assign = true,
+    incremental_simplify = true,
+    simplify = !incremental_simplify,
+    alpha_cache = true,
+)
     if !isnothing(g.symbolic) && assign
         return g.symbolic
     end
@@ -479,10 +488,12 @@ function execute_vec(code, INPUT; config, make_trace = true)
     max_steps = config.genotype.max_steps
     trace_len = max(1, min(length(code), max_steps))
     trace = zeros(Bool, size(R)..., trace_len) |> BitArray
-    trace = AxisArray(trace,
-                      reg=1:size(trace,1),
-                      case=1:size(trace,2),
-                      pc=[(1:size(trace,3)-1)..., :end])
+    trace = AxisArray(
+        trace,
+        reg = 1:size(trace, 1),
+        case = 1:size(trace, 2),
+        pc = [(1:size(trace, 3)-1)..., :end],
+    )
     steps = 0
     for (pc, inst) in enumerate(code)
         if pc > max_steps
@@ -490,7 +501,7 @@ function execute_vec(code, INPUT; config, make_trace = true)
         end
         evaluate_inst_vec!(R = R, D = D, inst = inst)
         if make_trace
-            trace[pc=pc] = R
+            trace[pc = pc] = R
         end
         steps += 1
     end
@@ -506,7 +517,8 @@ end
 function compile_chromosome(code; config)
     eff_ind = get_effective_indices(code, [1])
     eff = code[eff_ind]
-    (data -> execute(eff, data, config=config)[1]) |> FunctionWrapper{Bool, Tuple{Union{BitVector, Vector{Bool}}}}
+    (data -> execute(eff, data, config = config)[1]) |>
+    FunctionWrapper{Bool,Tuple{Union{BitVector,Vector{Bool}}}}
 end
 
 

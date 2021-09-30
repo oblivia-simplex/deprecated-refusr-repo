@@ -67,7 +67,9 @@ function prep_config(path)
     data = CSV.read(config.selection.data, DataFrame)
     data_n = ncol(data) - 1
     if data_n != config.genotype.data_n
-        @warn "data_n mismatch, setting to confirm to actual data" config.genotype.data_n ncol(data)-1
+        @warn "data_n mismatch, setting to confirm to actual data" config.genotype.data_n ncol(
+            data,
+        ) - 1
         config = @set config.genotype.data_n = data_n
     end
     config = @set config.genotype.ops = Symbol.(split(config.genotype.ops))
@@ -75,7 +77,7 @@ function prep_config(path)
     config = @set config.experiment =
         (@sprintf "%s.%02d-%02d-%02d" config.experiment hour(n) minute(n) second(n))
     config = @set config.logging.dir = Cockatrice.Logging.make_log_dir(config.experiment)
-    
+
     config
 end
 
