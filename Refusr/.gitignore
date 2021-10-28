@@ -1,7 +1,0 @@
-tmp/
-jl_*
-log/*
-*.so
-dev/
-.gdb_history
-.vscode
