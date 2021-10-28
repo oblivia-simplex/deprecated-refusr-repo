@@ -21,6 +21,9 @@ using FunctionWrappers: FunctionWrapper
 # ╔═╡ 20071086-5f2b-4206-bff9-04b6170bc4c9
 using Distributions
 
+# ╔═╡ 653a2830-e16e-4574-b2e7-35af85126850
+using Cockatrice
+
 # ╔═╡ 2b6e0bc2-725b-4f5e-bc01-d03088d21757
 using StatsPlots, PGFPlotsX
 
@@ -57,7 +60,7 @@ function bfunc_by_rnd_vec(dim)
 end
 
 # ╔═╡ 36e1a9e3-4b74-4dde-9892-cb15687522ec
-function bfunc_by_prog(prog)
+function bfunc_by_prog(prog::Vector{LinearGenotype.Inst})
 	function (bv)
 		config = (genotype = (registers_n = dim - 1, 
 				max_steps = len, output_reg = 1),) 
@@ -69,9 +72,12 @@ end
 
 # ╔═╡ fc9a3455-dc8e-4115-bab8-07648104affd
 function bfunc_by_rnd_prog(dim, len=512, ops="& | ~ xor")
+	len = len isa Integer ? len : rand(len)
 	registers = max(1, dim ÷ 2)
 	ops = Symbol.(split(ops))
 	prog = LinearGenotype.random_program(len; ops)
+	effective_indices = LinearGenotype.get_effective_indices(prog, [1])
+	prog = prog[effective_indices]
 	function (bv)
 		config = (genotype=(registers_n=dim-1, max_steps=len, output_reg=1),) 
 		out, _ = LinearGenotype.execute(prog, bv; config=config, make_trace=false)
@@ -281,7 +287,7 @@ genotype:
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1
-  weight_crossover_points: true
+  weight_crossover_points: false
   ops: "| & ~ mov xor"
 
 population:
@@ -303,6 +309,12 @@ dashboard:
 """
 
 # ╔═╡ 8fc9944a-8a02-4bba-b6a1-3b55df55ab52
+write("/tmp/energy-max.yaml", config_txt)
+
+# ╔═╡ e796384d-42ff-49ee-a77b-a6544de30cc2
+config = prep_config("/tmp/energy-max.yaml")
+
+# ╔═╡ 99e0594d-5384-42b8-a3be-9d581215c1f1
 
 
 # ╔═╡ af7c8f36-f37f-423f-af43-f77b65a5e33a
@@ -318,22 +330,75 @@ function maximize_energy_ff(geo, i)
 		return g.fitness
 	end
 	if g.phenotype === nothing
-		res, _ = LinearGenotype.evaluate(g, config = geo.config,
+		res, _ = FF.evaluate(g, config = geo.config,
 			INPUT = INPUT,
 			make_trace = false)
-		g.phenotype = (results = res, )
+		g.phenotype = (results = res, trace_info = [1 for _ in g.chromosome])
 	end
-	dirichlet = Sensitivity.dirichlet_energy_of_phenotype(
+	dirichlet = FF.dirichlet_energy_of_phenotype(
 		g.phenotype, 
-		geo.config)
+		geo.config) |> Float64
 	g.fitness = (
 		dirichlet = dirichlet,
-		ingenuity = 0,
-		parsimony = 0,
-		information = 0,
+		ingenuity = 0.0,
+		information = 0.0,
+		parsimony = 0.0,
 	)
 	return g.fitness
 end
+
+# ╔═╡ bf4a8ad7-7c6e-4873-be92-1cd03497f788
+
+
+# ╔═╡ 8109a1c5-6187-4a9f-9200-801cc5ce9050
+function evolve(steps)
+	EVO = Cockatrice.Evo.Evolution(
+        config,
+        creature_type = LinearGenotype.Creature,
+        fitness = maximize_energy_ff,
+        tracers = TRACERS,
+        mutate = LinearGenotype.mutate!,
+        crossover = LinearGenotype.crossover,
+        objective_performance = objective_performance,
+    )
+	# get an initial measure of the population
+	for i in eachindex(EVO.geo.deme)
+		maximize_energy_ff(EVO.geo, i)
+	end
+	for i in 1:steps
+		Cockatrice.Evo.step!(EVO)
+	end
+	population_energies = [g.fitness.dirichlet for g in EVO.geo.deme]
+	plot_distribution(filter(isfinite, vec(population_energies)), "population energies after $steps steps")
+end
+
+
+# ╔═╡ 0f2b8c8b-6d60-4813-835f-867c4d654afe
+evolve(0)
+
+# ╔═╡ 58a32aa9-1ec9-4d9d-a613-1e48708ff649
+
+
+# ╔═╡ 46c9a01f-4a83-4876-8c4a-fefec75e75ce
+evolve(10)
+
+# ╔═╡ d0d786b3-1979-4f1d-97b3-9422f7654261
+evolve(100)
+
+# ╔═╡ 512dfc65-9cef-40ff-8692-e6664172498f
+evolve(1000)
+
+# ╔═╡ 57c914f2-bf7c-43ff-979d-b379514e5047
+evolve(10000)
+
+# ╔═╡ 568dc58e-406a-4601-823e-ee4cd66d7bcb
+#population_funcs = [bfunc_by_prog(g.chromosome) for g in EVO.geo.deme]
+
+# ╔═╡ 9970f1b8-b4df-4928-8e05-323995bd3652
+
+
+# ╔═╡ fbfb7447-d3d3-4dfb-9bae-b529527a2002
+
 
 # ╔═╡ Cell order:
 # ╠═0424a62a-3692-11ec-3d69-158cb1b525d0
@@ -341,6 +406,7 @@ end
 # ╠═c57ea088-dd56-4fd5-8c24-491a7498c671
 # ╠═5c5eca07-1f2a-41ab-b021-6a93d3b7014c
 # ╠═20071086-5f2b-4206-bff9-04b6170bc4c9
+# ╠═653a2830-e16e-4574-b2e7-35af85126850
 # ╠═2b6e0bc2-725b-4f5e-bc01-d03088d21757
 # ╠═0cba539b-f584-4ecc-8aba-271850962e61
 # ╠═dad07b34-0884-4f8d-970d-0b6ba744856e
@@ -392,8 +458,21 @@ end
 # ╠═e6e51786-5d29-4177-bc15-f40b9e9d5409
 # ╠═dfc9c722-bfe8-479b-91ed-9ca98558953f
 # ╠═8ecf4ede-f882-4bdb-b7e1-8098b07e6591
-# ╠═16b54726-3d61-42db-893a-e47e6ccc291d
 # ╠═d8ac5a80-30fd-43e2-a30b-e2339f3c212b
 # ╠═4e8ec8ef-2152-4118-b924-8fb0c77105a2
 # ╠═8fc9944a-8a02-4bba-b6a1-3b55df55ab52
+# ╠═e796384d-42ff-49ee-a77b-a6544de30cc2
+# ╠═99e0594d-5384-42b8-a3be-9d581215c1f1
 # ╠═af7c8f36-f37f-423f-af43-f77b65a5e33a
+# ╠═16b54726-3d61-42db-893a-e47e6ccc291d
+# ╠═bf4a8ad7-7c6e-4873-be92-1cd03497f788
+# ╠═8109a1c5-6187-4a9f-9200-801cc5ce9050
+# ╠═0f2b8c8b-6d60-4813-835f-867c4d654afe
+# ╠═58a32aa9-1ec9-4d9d-a613-1e48708ff649
+# ╠═46c9a01f-4a83-4876-8c4a-fefec75e75ce
+# ╠═d0d786b3-1979-4f1d-97b3-9422f7654261
+# ╠═512dfc65-9cef-40ff-8692-e6664172498f
+# ╠═57c914f2-bf7c-43ff-979d-b379514e5047
+# ╠═568dc58e-406a-4601-823e-ee4cd66d7bcb
+# ╠═9970f1b8-b4df-4928-8e05-323995bd3652
+# ╠═fbfb7447-d3d3-4dfb-9bae-b529527a2002
