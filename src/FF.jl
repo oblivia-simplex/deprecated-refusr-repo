@@ -238,7 +238,7 @@ function fit(geo, i)
                 code = g.effective_code,
                 measure = hamming,
             ),
-            dirichlet_energy = dirichlet_energy_of_results(results, config),
+            dirichlet_energy = dirichlet_energy_of_results(res, config),
         )
 
     else
