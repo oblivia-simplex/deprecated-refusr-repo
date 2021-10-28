@@ -138,7 +138,7 @@ end
 function to_expr(inst::Inst)
     # ad hoc check for boolean value
     if inst.op == xor && inst.src == inst.dst
-        return false
+        return :($dst = false)
     end
     ## factor this out if other ops with this property are added
     op = nameof(inst.op)
@@ -169,7 +169,13 @@ function to_expr(
         return DEFAULT_EXPR
     end
     expr = pop!(code) |> to_expr
+    # if the final instruction in the code is just R[1] := R[1] ⊻ R[1]
+    # then the program codes for `x -> false`. nothing else matters here.
     LHS, RHS = expr.args
+    @assert LHS == :(R[1])
+    if RHS isa Bool
+        return RHS
+    end
     while !isempty(code)
         e = pop!(code) |> to_expr
         lhs, rhs = e.args

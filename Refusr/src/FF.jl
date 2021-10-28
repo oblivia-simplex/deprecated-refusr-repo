@@ -97,8 +97,8 @@ end
 unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
 
 
-function dirichlet_energy_of_phenotype(pheno, config)
-    f(v) = pheno.results[seqno(v)]
+function dirichlet_energy_of_results(results, config)
+    f(v) = results[seqno(v)]
     Sensitivity.dirichlet_energy(f, config.genotype.data_n)
 end
 
@@ -216,9 +216,6 @@ function fit(geo, i)
     if DATA === nothing
         _set_data(config.selection.data)
     end
-    # FIXME: refactor so that the interaction matrix is held as a field of Geo
-    # and is updated only as needed, IF that turns out to be faster. It might not
-    # be, as julia is really rather quick with its array and matrix operations.
     interaction_matrix = build_interaction_matrix(geo)
 
     answers = get_answers()
@@ -231,8 +228,6 @@ function fit(geo, i)
         (
             results = res,
             trace = tr,
-            # NOTE: we could actually reduce the trace to a vector, by tracking only
-            # the dst registers. if needed, the full trace could easily be reconstituted.
             trace_info = active_trace_information(
                 trace = tr,
                 code = g.effective_code,
@@ -243,6 +238,7 @@ function fit(geo, i)
                 code = g.effective_code,
                 measure = hamming,
             ),
+            dirichlet_energy = dirichlet_energy_of_results(results, config),
         )
 
     else
@@ -253,12 +249,7 @@ function fit(geo, i)
         return NewFitness()
     end
 
-
-    # We could scan the trace here, and see if the program solved the problem
-    # at some intermediary stage. (max trace hamming)
-
-    # NOTE trace_information should be minimized. Let's make it negative.
-    #trace_con = -1.0 * trace_information(g.phenotype.trace, answers)
+    # Only relative ingenuity needs to be reevaluated
 
     ingenuity = get_hamming(
         answers,
@@ -266,27 +257,30 @@ function fit(geo, i)
         sharing = config.selection.fitness_sharing,
         IM = interaction_matrix,
     )
-
-#=
-    comp_hamming = get_hamming(
-        answers,
-        (~).(g.phenotype.results),
-        sharing = config.selection.fitness_sharing,
-        IM = interaction_matrix,
-    )
-
-    ingenuity = max(hamming, comp_hamming * 0.75)
-=#
     update_interaction_matrix!(geo, i, g.phenotype.results)
-    # Variety measures how different the program behaves with respect to input
-    # variety = length(unique(g.phenotype.trace)) / length(g.phenotype.trace)
-    dirichlet_energy = dirichlet_energy_of_phenotype(g.phenotype, config)
-    digits = 8
-    D = round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
     H = round(ingenuity; digits)
-    I = round(maximum(g.phenotype.trace_info); digits)
 
-    g.fitness = (dirichlet = D, ingenuity = H, information = I, parsimony = parsimony(g)) 
+    D = if g.fitness.dirichlet |> isfinite
+        g.fitness.dirichlet
+    else
+        dirichlet_energy = g.phenotype.dirichlet_energy
+        digits = 8
+        round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
+    end
+
+    I = if g.fitness.information |> isfinite
+        g.fitness.information
+    else
+        round(maximum(g.phenotype.trace_info); digits)
+    end
+
+    P = if g.fitness.parsimony |> isfinite
+        g.fitness.parsimony
+    else
+        parsimony(g)
+    end
+
+    g.fitness = (dirichlet = D, ingenuity = H, information = I, parsimony = P) 
     return g.fitness
 end
 
