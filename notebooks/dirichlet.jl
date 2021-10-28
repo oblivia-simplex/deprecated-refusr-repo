@@ -1,31 +1,32 @@
 ### A Pluto.jl notebook ###
-# v0.16.4
+# v0.14.7
 
 using Markdown
 using InteractiveUtils
 
 # ╔═╡ d31dfd8f-2442-46cc-b788-3751a4f74308
 begin
-	cd("$(ENV["HOME"])/src/refusr/Refusr")
+	#cd("$(ENV["HOME"])/src/refusr")
 	using Pkg
-	Pkg.activate(".")
-	include("./src/base.jl")
+	REFUSR_URL="https://github.com/oblivia-simplex/refusr"
+	COCKATRICE_URL="file:///home/lucca/src/Cockatrice"
+	Pkg.activate(mktempdir())
+	Pkg.add(url=REFUSR_URL)
+	Pkg.add("Distributions")
+	using Distributions
+	Pkg.add("FunctionWrappers")
+	using FunctionWrappers
+	Pkg.add("Statistics")
+	using Statistics
+	Pkg.add("DataFrames")
+	using DataFrames
+	Pkg.add("StatsPlots")
+	using StatsPlots
+	Pkg.add("PGFPlotsX")
+	using PGFPlotsX
+	using Refusr
+	using Refusr: Cockatrice
 end
-
-# ╔═╡ c57ea088-dd56-4fd5-8c24-491a7498c671
-using Plots, Statistics, DataFrames
-
-# ╔═╡ 5c5eca07-1f2a-41ab-b021-6a93d3b7014c
-using FunctionWrappers: FunctionWrapper
-
-# ╔═╡ 20071086-5f2b-4206-bff9-04b6170bc4c9
-using Distributions
-
-# ╔═╡ 653a2830-e16e-4574-b2e7-35af85126850
-using Cockatrice
-
-# ╔═╡ 2b6e0bc2-725b-4f5e-bc01-d03088d21757
-using StatsPlots, PGFPlotsX
 
 # ╔═╡ 42e1aad9-6330-40e9-9aea-f7558edf4f1d
 using Images
@@ -403,11 +404,6 @@ evolve(10000)
 # ╔═╡ Cell order:
 # ╠═0424a62a-3692-11ec-3d69-158cb1b525d0
 # ╠═d31dfd8f-2442-46cc-b788-3751a4f74308
-# ╠═c57ea088-dd56-4fd5-8c24-491a7498c671
-# ╠═5c5eca07-1f2a-41ab-b021-6a93d3b7014c
-# ╠═20071086-5f2b-4206-bff9-04b6170bc4c9
-# ╠═653a2830-e16e-4574-b2e7-35af85126850
-# ╠═2b6e0bc2-725b-4f5e-bc01-d03088d21757
 # ╠═0cba539b-f584-4ecc-8aba-271850962e61
 # ╠═dad07b34-0884-4f8d-970d-0b6ba744856e
 # ╠═6c7d69c4-15bd-4e3c-82d0-843a2502d152
