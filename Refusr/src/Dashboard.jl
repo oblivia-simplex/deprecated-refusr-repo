@@ -162,9 +162,10 @@ end
 function fix_name(col)
     subs = [
         "_" => " ",
-        "fitness 1" => "relative ingenuity",
-        "fitness 2" => "trace information",
-        "fitness 3" => "parsimony",
+        "fitness ingenuity" => "relative ingenuity",
+        "fitness information" => "trace information",
+        "fitness parsimony" => "genetic parsimony",
+        "fitness dirichlet" => "Dirichlet energy proximity",
         "likeness" => "family resemblance",
         "meanfinite" => "mean",
         "std" => "(standard deviation)",
@@ -239,7 +240,7 @@ function specimen_summary(g, title; id = "specimen-summary")
 - Parents: $(isnothing(g.parents) ? "none" : join(g.parents, ", "))
 - Number of Offspring: $(g.num_offspring)
 - Phenotypic Resemblance to Parents: $(isnothing(g.likeness) ? "N/A" : join(string.(g.likeness), ", "))
-- Fitness Scores: $(join(string.(g.fitness), ", "))
+- Fitness Scores: $(g.fitness)
 - **Performance: $(g.performance)**
 
 """,

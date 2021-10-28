@@ -479,9 +479,7 @@ function variables_used_upper_bound(expr, letter = :D)
 end
 
 
-function truth_table(expr; width = nothing, samplesize::Union{Symbol,Float64,Int} = :ALL)
-    # Sampling without replacement fails when the sample ranges over integers larger
-    # than 64 bits in width
+function truth_table(expr::Expr; width = nothing, samplesize = :ALL)
     program = compile_expression(expr)
     if isnothing(width)
         used = variables_used_upper_bound(expr)
@@ -490,7 +488,21 @@ function truth_table(expr; width = nothing, samplesize::Union{Symbol,Float64,Int
     else
         variables = generate_input_variables(width)
     end
-    width = UInt128(width)
+    truth_table(program, variables, samplesize)
+end
+
+
+function truth_table(func; dim, samplesize = :ALL)
+    variables = generate_input_variables(dim)
+    truth_table(func, variables, samplesize)
+end
+
+function truth_table(program,
+                     variables,
+                     samplesize::Union{Symbol,Float64,Int} = :ALL)
+    # Sampling without replacement fails when the sample ranges over integers larger
+    # than 64 bits in width
+    width = UInt128(length(variables))
     use_replacement = (width > 60)
     range = UInt128(0):(UInt128(2)^width-1)
     if samplesize === :ALL || samplesize == 1.0

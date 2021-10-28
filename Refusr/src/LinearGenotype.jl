@@ -22,6 +22,10 @@ const Exp = Expressions
 const mov = identity
 
 
+
+
+
+
 @inline function lookup_arity(op_sym)
     table = Dict(:xor => 2, :| => 2, :& => 2, :~ => 1, :mov => 1, :identity => 1)
     try
@@ -196,7 +200,8 @@ Base.@kwdef mutable struct Creature
     effective_code::Union{Nothing,Vector{Inst}}
     effective_indices = nothing
     phenotype = nothing
-    fitness::Vector{Float64}
+    #fitness::Vector{Float64}
+    fitness::Fitness
     name::String
     generation::Int
     num_offspring::Int = 0
@@ -259,7 +264,7 @@ function Creature(config::NamedTuple)
             num_regs = config.genotype.registers_n,
         ) for _ = 1:len
     ]
-    fitness = Evo.init_fitness(config)
+    fitness = NewFitness()
     Creature(
         chromosome = chromosome,
         effective_code = nothing,
@@ -293,7 +298,7 @@ function Creature(d::Dict)
         effective_indices = isnothing(d["effective_indices"]) ? nothing :
                             Vector{Int}(d["effective_indices"]),
         phenotype = phenotype,
-        fitness = Vector{Float64}([isnothing(x) ? -Inf : x for x in d["fitness"]]),
+        fitness = NewFitness(),
         name = d["name"],
         generation = d["generation"],
         num_offspring = d["num_offspring"],
@@ -352,7 +357,7 @@ function Creature(chromosome::Vector{Inst})
         chromosome = chromosome,
         effective_code = nothing,
         phenotype = nothing,
-        fitness = [-Inf],
+        fitness = NewFitness(),
         name = Names.rand_name(4),
         generation = 0,
     )
@@ -389,7 +394,7 @@ function crossover(mother::Creature, father::Creature; config = nothing)::Vector
     for child in children
         child.parents = [mother.name, father.name]
         child.generation = generation
-        child.fitness = repeat([-Inf], config.selection.d_fitness)
+        child.fitness = NewFitness()
     end
     children
 end

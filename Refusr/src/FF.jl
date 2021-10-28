@@ -1,11 +1,23 @@
 module FF
 
-#import ..TreeGenotype: evaluate, parsimony
-#import ..LinearGenotype: evaluate, parsimony
 using FunctionWrappers: FunctionWrapper
 using Statistics, CSV, DataFrames, InformationMeasures, StatsBase
 using ..BitEntropy
+using ..Sensitivity
 using Cockatrice.Geo
+
+export Fitness, NewFitness
+
+const Fitness = NamedTuple{
+    (:dirichlet, :ingenuity, :information, :parsimony),
+    Tuple{Float64, Float64, Float64, Float64}
+}
+
+function NewFitness()
+    Fitness((-Inf, -Inf, -Inf, -Inf))
+end
+
+
 
 
 ### Interface for FF-required functions
@@ -14,7 +26,13 @@ evaluate(g; data, kwargs...) = error("unimplemented")
 ###
 
 DATA = nothing
+ORACLE = nothing
+SEQNO = nothing
 INPUT = nothing
+TARGET_ENERGY = 0
+
+oracle(row) = ORACLE[row]
+seqno(row) = SEQNO[row]
 
 function graydecode(n::Integer)
     r = n
@@ -32,7 +50,7 @@ graydecode_row(row) = pack(row) |> graydecode
 
 
 function _set_data(data::String; samplesize = :ALL)
-    global DATA, INPUT
+    global DATA, INPUT, ORACLE, SEQNO, TARGET_ENERGY
     data = CSV.read(data, DataFrame)
     data = sort(eachrow(data), by = r -> graydecode_row(r[1:end-1])) |> DataFrame
     if samplesize === :ALL || DataFrames.nrow(data) <= samplesize
@@ -42,6 +60,13 @@ function _set_data(data::String; samplesize = :ALL)
         DATA = data[rows, :]
     end
     INPUT = Array{Bool}(DATA[:, 1:end-1]) |> BitArray
+    ORACLE = Dict{BitVector, Bool}()
+    SEQNO = Dict{BitVector, Integer}()
+    for (i, row) in eachrow(INPUT) |> enumerate
+        ORACLE[row] = Bool(DATA[i,end])
+        SEQNO[row] = i
+    end
+    TARGET_ENERGY = Sensitivity.dirichlet_energy(oracle, size(INPUT, 2))
 end
 
 function _set_data(data::DataFrame)
@@ -70,6 +95,24 @@ function get_hamming(answers, result; IM = nothing, sharing = (!isnothing(IM)))
 end
 
 unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
+
+
+function dirichlet_energy_of_phenotype(pheno, config)
+    f(v) = pheno.results[seqno(v)]
+    Sensitivity.dirichlet_energy(f, config.genotype.data_n)
+end
+
+function dirichlet_energy_of_genotype(g, config)
+    if g.phenotype !== nothing
+        return dirichlet_energy_of_phenotype(g.phenotype, config)
+    end
+    code = LinearGenotype.effective_code(g)
+    f = LinearGenotype.compile_chromosome(code, config=config)
+    Sensitivity.dirichlet_energy(f, config.genotype.data_n)
+end
+
+
+
 
 
 # Only defined for Linear Genotypes for now
@@ -207,7 +250,7 @@ function fit(geo, i)
     end
 
     if isempty(g.effective_code)
-        return [0, 0, 0]
+        return NewFitness()
     end
 
 
@@ -217,21 +260,40 @@ function fit(geo, i)
     # NOTE trace_information should be minimized. Let's make it negative.
     #trace_con = -1.0 * trace_information(g.phenotype.trace, answers)
 
-    hamming = get_hamming(
+    ingenuity = get_hamming(
         answers,
         g.phenotype.results,
         sharing = config.selection.fitness_sharing,
         IM = interaction_matrix,
     )
 
+#=
+    comp_hamming = get_hamming(
+        answers,
+        (~).(g.phenotype.results),
+        sharing = config.selection.fitness_sharing,
+        IM = interaction_matrix,
+    )
+
+    ingenuity = max(hamming, comp_hamming * 0.75)
+=#
     update_interaction_matrix!(geo, i, g.phenotype.results)
     # Variety measures how different the program behaves with respect to input
     # variety = length(unique(g.phenotype.trace)) / length(g.phenotype.trace)
-    g.fitness = [hamming, maximum(g.phenotype.trace_info), parsimony(g)]
+    dirichlet_energy = dirichlet_energy_of_phenotype(g.phenotype, config)
+    digits = 8
+    D = round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
+    H = round(ingenuity; digits)
+    I = round(maximum(g.phenotype.trace_info); digits)
+
+    g.fitness = (dirichlet = D, ingenuity = H, information = I, parsimony = parsimony(g)) 
     return g.fitness
 end
 
 
+## TODO: the names of each fitness attribute should be paired with the actual
+## functions, and they should be selectable from the config file, as they were
+## in berbalang
 
 ## TODO
 # partial evaluation:

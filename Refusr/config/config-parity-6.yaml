@@ -11,6 +11,11 @@ selection:
   fitness_sharing: true
   trace: true
   lexical: true
+  fitness_weights:
+    dirichlet: 1000
+    ingenuity: 300
+    information: 200
+    parsimony: 50
 
 genotype:
   max_depth: 8
