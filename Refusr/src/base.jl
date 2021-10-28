@@ -27,6 +27,7 @@ include("Ops.jl")
 include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
 include("Expressions.jl")
+include("Sensitivity.jl")
 include("Names.jl")
 include("FF.jl")
 include("TreeGenotype.jl")
@@ -34,6 +35,7 @@ include("LinearGenotype.jl")
 include("step.jl")
 include("Z3Bridge.jl")
 include("Analysis.jl")
+
 
 meanfinite(s) = mean(filter(isfinite, s))
 stdfinite(s) = std(filter(isfinite, s))
@@ -102,18 +104,18 @@ stopping_condition(evo) =
 
 TRACERS = [
     (key = "objective", callback = objective_performance, rate = 1.00),
-    (key = "fitness_1", callback = g -> g.fitness[1], rate = 0.01),
-    (key = "fitness_2", callback = g -> g.fitness[2], rate = 0.01),
-    (key = "fitness_3", callback = g -> g.fitness[3], rate = 1.0),
-    (key = "chromosome_len", callback = g -> length(g.chromosome), rate = 0.01),
+    (key = "fitness_dirichlet", callback = g -> g.fitness.dirichlet, rate = 1.0),
+    (key = "fitness_ingenuity", callback = g -> g.fitness.ingenuity, rate = 1.0),
+    (key = "fitness_information", callback = g -> g.fitness.information, rate = 1.0),
+    (key = "chromosome_len", callback = g -> length(g.chromosome), rate = 1.0),
     (
         key = "effective_len",
         callback = g -> isnothing(g.effective_code) ? -Inf : length(g.effective_code),
-        rate = 0.01,
+        rate = 1.0,
     ),
-    (key = "num_offspring", callback = g -> g.num_offspring, rate = 0.01),
-    (key = "generation", callback = g -> g.generation, rate = 0.01),
-    (key = "likeness", callback = get_likeness, rate = 0.01),
+    (key = "num_offspring", callback = g -> g.num_offspring, rate = 1.0),
+    (key = "generation", callback = g -> g.generation, rate = 1.0),
+    (key = "likeness", callback = get_likeness, rate = 1.0),
 ]
 
 
@@ -121,15 +123,15 @@ TRACERS = [
 LOGGERS = [
     (key = "objective", reducer = maximum),
     (key = "objective", reducer = meanfinite),
-    (key = "fitness_1", reducer = maximum),
-    (key = "fitness_1", reducer = meanfinite),
-    (key = "fitness_1", reducer = std),
-    (key = "fitness_2", reducer = maximum),
-    (key = "fitness_2", reducer = meanfinite),
-    (key = "fitness_2", reducer = std),
-    (key = "fitness_3", reducer = meanfinite),
-    (key = "fitness_3", reducer = maximum),
-    (key = "fitness_3", reducer = std),
+    (key = "fitness_dirichlet", reducer = maximum),
+    (key = "fitness_dirichlet", reducer = meanfinite),
+    (key = "fitness_dirichlet", reducer = std),
+    (key = "fitness_ingenuity", reducer = maximum),
+    (key = "fitness_ingenuity", reducer = meanfinite),
+    (key = "fitness_ingenuity", reducer = std),
+    (key = "fitness_information", reducer = meanfinite),
+    (key = "fitness_information", reducer = maximum),
+    (key = "fitness_information", reducer = std),
     (key = "chromosome_len", reducer = Statistics.maximum),
     (key = "chromosome_len", reducer = Statistics.mean),
     (key = "effective_len", reducer = Statistics.maximum),

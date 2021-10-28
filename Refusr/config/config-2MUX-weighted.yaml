@@ -1,33 +1,28 @@
 experiment_duration: 50000
-step_duration: 1
+step_duration: 2
 preserve_population: true
-experiment: "2MUX-with-sharing-weighted"
+experiment: "2MUX-without-sharing-weighted"
 
 selection:
   fitness_function: "fit"
   data: "./samples/2-MUX_overs-cohos-orbed_ALL.csv"
-  d_fitness: 4
+  d_fitness: 3
   t_size: 6
-  fitness_sharing: true
+  fitness_sharing: false
   trace: true
   lexical: true
-  fitness_weights:
-    dirichlet: 100
-    ingenuity: 1000
-    information: 100
-    parsimony: 20
 
 genotype:
   max_depth: 8
   min_len: 4
-  max_len: 200
+  max_len: 100
   data_n: 6
-  registers_n: 5
+  registers_n: 4
   output_reg: 1
   max_steps: 512
   mutation_rate: 0.1
   weight_crossover_points: true
-  ops: "| & ~ mov"
+  ops: "& | mov ~"
 
 population:
   size: [10, 10]

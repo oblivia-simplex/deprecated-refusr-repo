@@ -1,7 +1,7 @@
 module Sensitivity
 
 using ..Expressions
-using LightGraphs
+using Graphs
 using MetaGraphs
 using Statistics
 using GraphRecipes
@@ -25,7 +25,7 @@ function hypercube(dim)
         end
     end
 
-    G = LightGraphs.SimpleGraph(adj) |> HyperCube
+    G = Graphs.SimpleGraph(adj) |> HyperCube
 
     for (v, b) in zip(vertices(G), bits)
         set_prop!(G, v, :bits, b)
@@ -70,12 +70,12 @@ end
 
 
 
-function ∇(Q, v)
-    to_Z(b) = b ? 1 : -1
+function ∇(Q, v)::Rational
+    to_Z(b) = Rational(b ? 1 : -1)
     f(x) = get_prop(Q, x, :value) |> to_Z
     value = f(v)
     neighbourhood = f.(all_neighbors(Q, v))
-    (((neighbourhood .- value) ./ 2.0) .^ 2) |> mean
+    (((neighbourhood .- value) ./ 2) .^ 2) |> mean
 end
 
 
@@ -109,7 +109,7 @@ function dirichlet_energy(expr::Expr)
 end
 
 
-function dirichlet_energy(f::Function, dim::Integer)
+function dirichlet_energy(f, dim)
     Q = hypercube(dim)
     evaluate_on_hypercube!(f, Q)
     energize_hypercube!(Q)
@@ -126,6 +126,11 @@ function plotcube(Q)
         nodecolor = [get_prop(Q, v, :energy) |> color for v in vertices(Q)],
     )
 end
+
+
+# TODO: write a function to estimate dirichlet energy from a partial sample
+# pick random vertices, and then expand with a nonrepeating random walk from
+# each vertex to grab random regions
 
 
 
