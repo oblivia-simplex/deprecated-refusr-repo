@@ -10,8 +10,8 @@ begin
 	REFUSR_URL="https://github.com/oblivia-simplex/refusr"
 	COCKATRICE_URL="https://github.com/oblivia-simplex/Cockatrice.jl"
 	Pkg.activate(mktempdir())
-	Pkg.add(url=COCKATRICE_URL) ; using Cockatrice
-	Pkg.add(url=REFUSR_URL); using Refusr: Sensitivity, FF, LinearGenotypes, Expressions
+	#Pkg.add(url=COCKATRICE_URL) ; using Cockatrice
+	Pkg.add(url=REFUSR_URL); using Refusr: Sensitivity, FF, LinearGenotypes, Expressions, Cockatrice
 	Pkg.add("Distributions"); 	using Distributions
 	Pkg.add("FunctionWrappers"); using FunctionWrappers: FunctionWrapper
 	Pkg.add("Statistics");	using Statistics
