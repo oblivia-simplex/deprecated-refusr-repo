@@ -1,31 +1,23 @@
 ### A Pluto.jl notebook ###
-# v0.14.7
+# v0.17.0
 
 using Markdown
 using InteractiveUtils
 
 # ╔═╡ d31dfd8f-2442-46cc-b788-3751a4f74308
 begin
-	#cd("$(ENV["HOME"])/src/refusr")
 	using Pkg
 	REFUSR_URL="https://github.com/oblivia-simplex/refusr"
-	COCKATRICE_URL="file:///home/lucca/src/Cockatrice"
+	COCKATRICE_URL="https://github.com/oblivia-simplex/Cockatrice.jl"
 	Pkg.activate(mktempdir())
-	Pkg.add(url=REFUSR_URL)
-	Pkg.add("Distributions")
-	using Distributions
-	Pkg.add("FunctionWrappers")
-	using FunctionWrappers
-	Pkg.add("Statistics")
-	using Statistics
-	Pkg.add("DataFrames")
-	using DataFrames
-	Pkg.add("StatsPlots")
-	using StatsPlots
-	Pkg.add("PGFPlotsX")
-	using PGFPlotsX
-	using Refusr
-	using Refusr: Cockatrice
+	Pkg.add(url=COCKATRICE_URL) ; using Cockatrice
+	Pkg.add(url=REFUSR_URL); using Refusr: Sensitivity, FF, LinearGenotypes, Expressions
+	Pkg.add("Distributions"); 	using Distributions
+	Pkg.add("FunctionWrappers"); using FunctionWrappers: FunctionWrapper
+	Pkg.add("Statistics");	using Statistics
+	Pkg.add("DataFrames");	using DataFrames
+	Pkg.add("StatsPlots"); using StatsPlots
+	Pkg.add("PGFPlotsX");	using PGFPlotsX
 end
 
 # ╔═╡ 42e1aad9-6330-40e9-9aea-f7558edf4f1d

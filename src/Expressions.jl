@@ -2,6 +2,7 @@
 module Expressions
 
 using ..Ops
+using Espresso
 using PyCall
 using LightGraphs
 using MetaGraphs
@@ -14,10 +15,6 @@ using DataFrames
 using StatsBase
 using FunctionWrappers: FunctionWrapper
 #using SymPy
-using Espresso # Espresso actually implements some of the features
-# we already have here, but I think my implementation is faster.
-# It does seem much better for simplification, though. but worse than sympy
-# the SymPy Julia package brings trouble with it. just use the Python one for now.
 
 export replace!,
     replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
@@ -180,7 +177,6 @@ prune!(e, depth, terminals) = nothing
 
 
 
-_simplify(e) = Espresso.simplify(e)
 
 # function make_symbols_(v::Vector{String})
 #     if isempty(v)

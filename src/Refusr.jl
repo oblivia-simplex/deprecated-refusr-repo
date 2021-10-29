@@ -32,18 +32,22 @@ function launch(config_path)
     headless = "REFUSR_HEADLESS" ∈ keys(ENV) && parse(Bool, ENV["REFUSR_HEADLESS"])
 
     server_task = if (!headless) && config.dashboard.enable
-        task = Dashboard.initialize_server(config = config, background = true)
-        println("Waiting for server...")
-        while !Dashboard.check_server(config)
-            sleep(1)
-            print(".")
+        try
+            task = Dashboard.initialize_server(config = config, background = true)
+            println("Waiting for server...")
+            while !Dashboard.check_server(config)
+                sleep(1)
+                print(".")
+            end
+            println()
+            log_dir = Dashboard.sanitize_log_dir(config.logging.dir)
+            run(
+                `xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)/$(log_dir)"`,
+            )
+            task
+        catch e
+            @async begin nothing end
         end
-        println()
-        log_dir = Dashboard.sanitize_log_dir(config.logging.dir)
-        run(
-            `xdg-open "http://$(config.dashboard.server):$(config.dashboard.port)/$(log_dir)"`,
-        )
-        task
     else
         @async begin
             nothing

@@ -1,12 +1,12 @@
 experiment_duration: 5000000
 step_duration: 1
 preserve_population: true
-experiment: "Parity-11-xor"
+experiment: "Parity-11-sans-dirichlet"
 
 selection:
   fitness_function: "fit"
   data: "./samples/parity-11.csv"
-  d_fitness: 3
+  d_fitness: 4
   t_size: 6
   fitness_sharing: true
   trace: true
