@@ -249,8 +249,13 @@ function fit(geo, i)
         return NewFitness()
     end
 
-    # Only relative ingenuity needs to be reevaluated
 
+    # since we don't have limitless confidence in any one
+    # fitness metric, and would like to make room for tie-
+    # breakers, we'll round off the various attributes
+    # after a certain number of digits.
+    digits = 8
+    # Only relative ingenuity needs to be reevaluated
     ingenuity = get_hamming(
         answers,
         g.phenotype.results,
@@ -264,7 +269,6 @@ function fit(geo, i)
         g.fitness.dirichlet
     else
         dirichlet_energy = g.phenotype.dirichlet_energy
-        digits = 8
         round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
     end
 

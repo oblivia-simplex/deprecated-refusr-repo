@@ -3,7 +3,6 @@ Pkg.activate("$(@__DIR__)/..")
 Pkg.instantiate()
 
 
-using Blink
 using CSV
 using Cockatrice
 using Cockatrice.Config
@@ -79,7 +78,7 @@ function prep_config(path)
     config = @set config.experiment =
         (@sprintf "%s.%02d-%02d-%02d" config.experiment hour(n) minute(n) second(n))
     config = @set config.logging.dir = Cockatrice.Logging.make_log_dir(config.experiment)
-
+    println(config)
     config
 end
 
