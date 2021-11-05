@@ -30,6 +30,9 @@ ORACLE = nothing
 SEQNO = nothing
 INPUT = nothing
 TARGET_ENERGY = 0
+ANSWERS = nothing
+
+get_answers() = ANSWERS
 
 oracle(row) = ORACLE[row]
 seqno(row) = SEQNO[row]
@@ -50,8 +53,8 @@ graydecode_row(row) = pack(row) |> graydecode
 
 
 function _set_data(data::String; samplesize = :ALL)
-    global DATA, INPUT, ORACLE, SEQNO, TARGET_ENERGY
-    data = CSV.read(data, DataFrame)
+    global DATA, INPUT, ORACLE, SEQNO, TARGET_ENERGY, ANSWERS
+    data = Bool.(CSV.read(data, DataFrame))
     data = sort(eachrow(data), by = r -> graydecode_row(r[1:end-1])) |> DataFrame
     if samplesize === :ALL || DataFrames.nrow(data) <= samplesize
         DATA = data
@@ -67,6 +70,7 @@ function _set_data(data::String; samplesize = :ALL)
         SEQNO[row] = i
     end
     TARGET_ENERGY = Sensitivity.dirichlet_energy(oracle, size(INPUT, 2))
+    ANSWERS = DATA.OUT
 end
 
 function _set_data(data::DataFrame)
@@ -99,8 +103,12 @@ unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
 
 function dirichlet_energy_of_results(results, config)
     f(v) = results[seqno(v)]
-    Sensitivity.dirichlet_energy(f, config.genotype.data_n)
+    Sensitivity.fast_dirichlet_energy(f, config.genotype.data_n,
+                                      target=TARGET_ENERGY,
+                                      initial_sample=0.05,
+                                      epsilon=0.05)
 end
+
 
 function dirichlet_energy_of_genotype(g, config)
     if g.phenotype !== nothing
@@ -123,7 +131,6 @@ intermediate_hamming(answers, trace) =
     map(c -> get_hamming(answers, c), eachcol(intermediate_results(trace)))
 
 
-get_answers(data = DATA) = Bool.(data[:, end]) |> BitArray
 
 # to keep things working smoothly, we'll consider an absent phenotype to have passed
 # all tests, just for the sake of difficulty calculation. The idea here is that a
@@ -133,7 +140,7 @@ get_answers(data = DATA) = Bool.(data[:, end]) |> BitArray
 # way, instead.
 passes(e) =
     isnothing(e.phenotype) ? BitArray(rand(Bool, nrow(DATA))) :
-    (~).(e.phenotype.results .⊻ get_answers(DATA))
+    (~).(e.phenotype.results .⊻ ANSWERS)
 
 ## TODO maintain this as a field of the Geo object, and update it in a piecemeal
 ## way, as needed. No need to reevaluate every row, every step.
@@ -177,7 +184,7 @@ function trace_hamming(trace, answers)
 end
 
 
-function trace_information(trace; answers = get_answers())
+function trace_information(trace; answers = ANSWERS)
     x = view(trace, OUTREG, :, :)
     map(x -> mutualinfo(answers, x), eachcol(x))
 end
@@ -185,7 +192,7 @@ end
 function active_trace_information(;
     code,
     trace,
-    answers = get_answers(),
+    answers = ANSWERS,
     measure = mutualinfo,
 )
     slices = (view(trace, r, :, n) for (n, r) in enumerate(i.dst for i in code))
@@ -201,7 +208,7 @@ function update_interaction_matrix!(geo, index, out_vec)
         geo.interaction_matrix = build_interaction_matrix(geo)
     end
     flat_index = Geo.hilbert_index(geo, index)
-    geo.interaction_matrix[:, flat_index] .= (!).(out_vec .⊻ get_answers(DATA))
+    geo.interaction_matrix[:, flat_index] .= (!).(out_vec .⊻ ANSWERS)
 end
 
 function get_difficulty(interaction_matrix, row_index)
@@ -218,7 +225,7 @@ function fit(geo, i)
     end
     interaction_matrix = build_interaction_matrix(geo)
 
-    answers = get_answers()
+    answers = ANSWERS
 
     g.phenotype = if isnothing(g.phenotype)
         res, tr = evaluate(g, config = config, INPUT = INPUT, make_trace = true)

@@ -1,6 +1,7 @@
 # Functions for manipulating expressions
 module Expressions
 
+using ..Bits
 using ..Ops
 using Espresso
 using PyCall
@@ -423,12 +424,6 @@ function generate_terminals(num; include_constants = false)
         push!(terminals, true => 0, false => 0)
     end
     return terminals
-end
-
-
-function bits(n, num_bits)
-    n = UInt128(n)
-    [(n & UInt128(1) << i != 0) for i = 0:(num_bits-1)]
 end
 
 

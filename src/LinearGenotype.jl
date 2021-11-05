@@ -564,7 +564,7 @@ end
 
 unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
 
-function evaluate_sequential(code; INPUT::BitArray, config::NamedTuple, make_trace = true)
+function evaluate_sequential(code; INPUT, config::NamedTuple, make_trace = true)
     res, tr =
         [
             execute(code, row, config = config, make_trace = make_trace) for

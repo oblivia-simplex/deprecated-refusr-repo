@@ -22,6 +22,7 @@ using Setfield
 using Statistics
 using Printf
 
+include("Bits.jl")
 include("Ops.jl")
 include("BitEntropy.jl")
 include("StructuredTextTemplate.jl")
@@ -90,7 +91,7 @@ function objective_performance(g)
         return g.performance
     end
 
-    correct = (!).(g.phenotype.results .⊻ FF.get_answers(FF.DATA))
+    correct = (!).(g.phenotype.results .⊻ FF.ANSWERS)
     g.performance = mean(correct)
     return g.performance
 end
