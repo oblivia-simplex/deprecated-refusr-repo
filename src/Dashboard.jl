@@ -24,6 +24,7 @@ using Plotly
 using PlotlyBase
 using Printf
 using Serialization
+using StatsBase
 
 
 REFUSR_DEBUG = "REFUSR_DEBUG" ∈ keys(ENV) ? parse(Bool, ENV["REFUSR_DEBUG"]) : false
@@ -347,7 +348,9 @@ function interaction_matrix_image(ims::Array)
     if isempty(ims)
         return ""
     end
-    imgs = [colorant"white" .* im for im in ims]
+    h, w = size(ims[1])
+    s = h > w ? sample(1:h, w, replace=false) : (1:h)
+    imgs = [colorant"white" .* im[s] for im in ims]
     mos = mosaicview(
         imgs...,
         fillvalue = colorant"red",

@@ -17,7 +17,7 @@ using FunctionWrappers: FunctionWrapper
 #using SymPy
 
 export replace!,
-    replace, count_subexpressions, enumerate_expr, truth_table, compile_expression, nand, ⊃
+    replace, count_subexpressions, enumerate_expr, truth_table, compile_expression 
 
 
 SYMPY = pyimport("sympy")
@@ -28,9 +28,6 @@ function __init__()
 end
 
 
-nand(a, b) = ~(a & b)
-
-(⊃)(a, b) = (~a) | b
 
 function Base.replace!(e::Expr, p::Pair; all = true)
     old, new = p
