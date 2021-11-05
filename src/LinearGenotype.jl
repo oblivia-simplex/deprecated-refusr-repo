@@ -18,7 +18,6 @@ using ..Expressions
 
 const RegType = Bool
 const Exp = Expressions
-
 const mov = identity
 
 
@@ -27,7 +26,7 @@ const mov = identity
 
 
 @inline function lookup_arity(op_sym)
-    table = Dict(:xor => 2, :| => 2, :& => 2, :~ => 1, :mov => 1, :identity => 1)
+    table = Dict(:xor => 2, :| => 2, :& => 2, :nand => 2, :nor => 2, :~ => 1, :mov => 1, :identity => 1)
     try
         return table[op_sym]
     catch e
@@ -116,7 +115,37 @@ function Inst(d::Dict)
     Inst(op, d["arity"], d["dst"], d["src"])
 end
 
+#####
+## Decode a binary encoded instruction -- not yet in use
+## format:
+## [opcode][dst][src][is src data or reg? bit]
+## arity is always 2
+#####
+function binInst(bv, num_reg, num_data)
+    op = function (a, b)
+        # I fear this is a bit inefficient, and possibly
+        # awkward to vectorialize
+        i = (Int(a) << 1) | Int(b)
+        bv[i]
+    end |> FunctionWrapper{Bool, Tuple{Bool, Bool}}
+    ptr = 5
+    dstbits = ceil(log2(num_reg)) |> Int
+    dst = bv[ptr:(ptr+dstbits)] |> packbits
+    ptr += dstbits
+    srcbits = max(log2(num_reg), log2(num_data)) |> ceil |> Int
+    src = bv[ptr:(ptr+srcbits)] |> packbits
+    ptr += srcbits
+    if bv[ptr]
+        src *= -1
+    end
 
+    Inst(
+        op,
+        2,
+        dst,
+        src,
+    )
+end
 
 
 function serialize_op(inst::Inst)
@@ -380,7 +409,7 @@ function splice_point(g, weighted_by_trace_info = true)
     if !weighted_by_trace_info
         return rand(1:length(g.chromosome))
     end
-    weights = zeros(length(g.chromosome))
+    weights = Vector{Float64}(undef, length(g.chromosome))
     weights[g.effective_indices] .= g.phenotype.trace_info
     sample(1:length(g.chromosome), Weights(weights), 1) |> first
 end
@@ -477,7 +506,7 @@ function execute(code, data; config, make_trace = true)::Tuple{RegType,BitArray}
     outreg = config.genotype.output_reg
     regs = zeros(RegType, num_regs)
     trace_len = max(1, min(length(code), max_steps)) # Assuming no loops
-    trace = zeros(RegType, num_regs, trace_len) |> BitArray
+    trace = BitArray(undef, num_regs, trace_len)
     steps = 0
     for (pc, inst) in enumerate(code)
         if pc > max_steps
@@ -495,10 +524,10 @@ end
 
 function execute_vec(code, INPUT; config, make_trace = true)
     D = INPUT'
-    R = BitArray(zeros(Bool, (config.genotype.registers_n, size(D, 2))))
+    R = BitArray(undef, config.genotype.registers_n, size(D, 2))
     max_steps = config.genotype.max_steps
     trace_len = max(1, min(length(code), max_steps))
-    trace = zeros(Bool, size(R)..., trace_len) |> BitArray
+    trace = BitArray(undef, size(R)..., trace_len)
     trace = AxisArray(
         trace,
         reg = 1:size(trace, 1),
@@ -520,7 +549,7 @@ function execute_vec(code, INPUT; config, make_trace = true)
 end
 
 
-function evaluate_vectoral(code; INPUT::BitArray, config::NamedTuple, make_trace = true)
+function evaluate_vectoral(code; INPUT, config::NamedTuple, make_trace = true)
     execute_vec(code, INPUT, config = config, make_trace = make_trace)
 end
 
@@ -544,7 +573,7 @@ function evaluate_sequential(code; INPUT::BitArray, config::NamedTuple, make_tra
     (res, cat(tr..., dims = (3,)))
 end
 
-function FF.evaluate(g::Creature; INPUT::BitArray, config::NamedTuple, make_trace = true)
+function FF.evaluate(g::Creature; INPUT, config::NamedTuple, make_trace = true)
     if isnothing(g.effective_code)
         #g.effective_code = strip_introns(g.chromosome, [config.genotype.output_reg])
         g.effective_indices = get_effective_indices(g.chromosome, [1])
