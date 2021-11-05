@@ -1,0 +1,48 @@
+experiment_duration: 5000000
+step_duration: 1
+preserve_population: true
+experiment: "12-bit-odd-parity"
+
+selection:
+  fitness_function: "fit"
+  data: "./samples/12-bit-odd-parity.csv"
+  d_fitness: 4
+  t_size: 6
+  fitness_sharing: true
+  trace: true
+  lexical: false
+  fitness_weights:
+    dirichlet: 1000
+    ingenuity: 300
+    information: 200
+    parsimony: 50
+
+
+genotype:
+  max_depth: 8
+  min_len: 4
+  max_len: 800
+  data_n: 11
+  registers_n: 8
+  output_reg: 1
+  max_steps: 800
+  mutation_rate: 0.1
+  weight_crossover_points: true
+  ops: "xor | & ~"
+
+population:
+  size: [15, 15]
+  toroidal: true
+  locality: 16
+  n_elites: 10
+  migration_rate: 1.0
+  migration_type: "elite"
+
+logging:
+  log_every: 1
+  save_every: 50
+
+dashboard:
+  server: "0.0.0.0"
+  port: 9124
+  enable: true
