@@ -29,7 +29,7 @@ DATA = nothing
 ORACLE = nothing
 SEQNO = nothing
 INPUT = nothing
-TARGET_ENERGY = 0
+TARGET_ENERGY = nothing
 ANSWERS = nothing
 
 get_answers() = ANSWERS
@@ -69,7 +69,7 @@ function _set_data(data::String; samplesize = :ALL)
         ORACLE[row] = Bool(DATA[i,end])
         SEQNO[row] = i
     end
-    TARGET_ENERGY = Sensitivity.dirichlet_energy(oracle, size(INPUT, 2))
+    TARGET_ENERGY = Sensitivity.dirichlet_energy(x -> ORACLE[x], size(INPUT, 2))
     ANSWERS = DATA.OUT
 end
 

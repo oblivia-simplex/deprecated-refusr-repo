@@ -525,6 +525,7 @@ end
 function execute_vec(code, INPUT; config, make_trace = true)
     D = INPUT'
     R = BitArray(undef, config.genotype.registers_n, size(D, 2))
+    R .= false
     max_steps = config.genotype.max_steps
     trace_len = max(1, min(length(code), max_steps))
     trace = BitArray(undef, size(R)..., trace_len)
