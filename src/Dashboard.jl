@@ -349,7 +349,7 @@ function interaction_matrix_image(ims::Array)
         return ""
     end
     h, w = size(ims[1])
-    s = h > w ? sample(1:h, w, replace=false) : (1:h)
+    s = h > w ? sort(sample(1:h, w, replace=false)) : (1:h)
     imgs = [colorant"white" .* im[s,:] for im in ims]
     mos = mosaicview(
         imgs...,

@@ -101,12 +101,21 @@ end
 unzip(a) = map(x -> getfield.(a, x), fieldnames(eltype(a)))
 
 
+FASTMODE = false
+
 function dirichlet_energy_of_results(results, config)
+    if config.selection.fitness_weights.dirichlet == 0
+        # why bother?
+        return 0
+    end
     f(v) = results[seqno(v)]
-    Sensitivity.fast_dirichlet_energy(f, config.genotype.data_n,
-                                      target=TARGET_ENERGY,
-                                      initial_sample=0.05,
-                                      epsilon=0.05)
+    if FASTMODE
+        Sensitivity.fast_dirichlet_energy(f, config.genotype.data_n,
+                                          target=TARGET_ENERGY,
+                                          initial_sample=0.05,
+                                          epsilon=0.05)
+    else
+        Sensitivity.dirichlet_energy(f, config.genotype.data_n)
 end
 
 
@@ -223,11 +232,21 @@ function fit(geo, i)
     if DATA === nothing
         _set_data(config.selection.data)
     end
+
+    if isnothing(g.effective_code)
+        g.effective_indices = LinearGenotype.get_effective_indices(g.chromosome, [1])
+        g.effective_code = view(g.chromosome, g.effective_indices)
+    end
+
+    if isempty(g.effective_code)
+        return NewFitness()
+    end
+
     interaction_matrix = build_interaction_matrix(geo)
 
     answers = ANSWERS
 
-    g.phenotype = if isnothing(g.phenotype)
+    g.phenotype = begin #if isnothing(g.phenotype)
         res, tr = evaluate(g, config = config, INPUT = INPUT, make_trace = true)
 
         hamming(a, b) = (~).(a .⊻ b) |> mean
@@ -248,14 +267,9 @@ function fit(geo, i)
             dirichlet_energy = dirichlet_energy_of_results(res, config),
         )
 
-    else
-        g.phenotype
+    #else
+    #    g.phenotype
     end
-
-    if isempty(g.effective_code)
-        return NewFitness()
-    end
-
 
     # since we don't have limitless confidence in any one
     # fitness metric, and would like to make room for tie-
@@ -263,19 +277,20 @@ function fit(geo, i)
     # after a certain number of digits.
     digits = 8
     # Only relative ingenuity needs to be reevaluated
-    ingenuity = get_hamming(
-        answers,
-        g.phenotype.results,
-        sharing = config.selection.fitness_sharing,
-        IM = interaction_matrix,
-    )
+    ingenuity = if config.selection.fitness_weights.ingenuity > 0
+        get_hamming(
+            answers,
+            g.phenotype.results,
+            sharing = config.selection.fitness_sharing,
+            IM = interaction_matrix,
+        )
+    else
+        0
+    end
     update_interaction_matrix!(geo, i, g.phenotype.results)
     H = round(ingenuity; digits)
 
-    D = if g.fitness.dirichlet |> isfinite
-        g.fitness.dirichlet
-    else
-        dirichlet_energy = g.phenotype.dirichlet_energy
+    D = dirichlet_energy = g.phenotype.dirichlet_energy
         round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
     end
 
