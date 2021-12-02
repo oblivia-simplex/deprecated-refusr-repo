@@ -4,6 +4,8 @@ authors = ["lucca <lucca.fraser@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+BitTools = "241b95ae-9817-4b36-a40a-0f608189f837"
+Junta = "cddeebfc-85d0-449a-b46a-69f1e90da772"
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 AxisArrays = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 BenchmarkPlots = "ab8c0f59-4072-4e0d-8f91-a91e1495eb26"
