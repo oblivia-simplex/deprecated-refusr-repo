@@ -4,7 +4,7 @@ preserve_population: true
 experiment: "12-bit-odd-parity"
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/12-bit-odd-parity.csv"
   d_fitness: 4
   t_size: 6

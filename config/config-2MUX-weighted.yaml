@@ -4,7 +4,7 @@ preserve_population: true
 experiment: "2MUX-without-sharing-weighted"
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/2-MUX_overs-cohos-orbed_ALL.csv"
   d_fitness: 3
   t_size: 6

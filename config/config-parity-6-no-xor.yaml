@@ -4,7 +4,7 @@ preserve_population: true
 experiment: "Parity-6-xor"
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/parity-6.csv"
   d_fitness: 3
   t_size: 6
