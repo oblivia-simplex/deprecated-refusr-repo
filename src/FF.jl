@@ -1,28 +1,20 @@
 module FF
 
 using FunctionWrappers: FunctionWrapper
-using Statistics, CSV, DataFrames, InformationMeasures, StatsBase
+using Statistics, CSV, DataFrames, InformationMeasures
+using StatsBase: sample
+using Setfield
 using ..BitEntropy
 using ..Sensitivity
+using ..LinearGenotype
 using Cockatrice.Geo
 
-export Fitness, NewFitness
-
-const Fitness = NamedTuple{
-    (:dirichlet, :ingenuity, :information, :parsimony),
-    Tuple{Float64, Float64, Float64, Float64}
-}
-
-function NewFitness()
-    Fitness((-Inf, -Inf, -Inf, -Inf))
-end
 
 
-
-
-### Interface for FF-required functions
-parsimony(g) = error("unimplemented")
-evaluate(g; data, kwargs...) = error("unimplemented")
+const Fitness = LinearGenotype.Fitness
+const NewFitness = LinearGenotype.NewFitness
+const parsimony = LinearGenotype.parsimony
+const evaluate = LinearGenotype.evaluate
 ###
 
 DATA = nothing
@@ -116,6 +108,7 @@ function dirichlet_energy_of_results(results, config)
                                           epsilon=0.05)
     else
         Sensitivity.dirichlet_energy(f, config.genotype.data_n)
+    end
 end
 
 
@@ -266,18 +259,14 @@ function fit(geo, i)
             ),
             dirichlet_energy = dirichlet_energy_of_results(res, config),
         )
-
-    #else
-    #    g.phenotype
     end
 
     # since we don't have limitless confidence in any one
     # fitness metric, and would like to make room for tie-
     # breakers, we'll round off the various attributes
     # after a certain number of digits.
-    digits = 8
     # Only relative ingenuity needs to be reevaluated
-    ingenuity = if config.selection.fitness_weights.ingenuity > 0
+    H = if config.selection.fitness_weights.ingenuity > 0
         get_hamming(
             answers,
             g.phenotype.results,
@@ -288,16 +277,13 @@ function fit(geo, i)
         0
     end
     update_interaction_matrix!(geo, i, g.phenotype.results)
-    H = round(ingenuity; digits)
 
     D = dirichlet_energy = g.phenotype.dirichlet_energy
-        round(1.0 - abs(dirichlet_energy - TARGET_ENERGY); digits)
-    end
 
     I = if g.fitness.information |> isfinite
         g.fitness.information
     else
-        round(maximum(g.phenotype.trace_info); digits)
+        maximum(g.phenotype.trace_info)
     end
 
     P = if g.fitness.parsimony |> isfinite
@@ -306,8 +292,20 @@ function fit(geo, i)
         parsimony(g)
     end
 
-    g.fitness = (dirichlet = D, ingenuity = H, information = I, parsimony = P) 
+    _fitness = (dirichlet = D, ingenuity = H, information = I, parsimony = P)
+    weights = config.selection.fitness_weights
+    scalar_fitness = sum(_fitness[k] * weights[k] for k in keys(weights))
+    g.fitness = (scalar = scalar_fitness, _fitness...)
     return g.fitness
+end
+
+
+function scalar_fitness(fitness::NamedTuple, weights::NamedTuple)
+    sum(fitness[k] * weights[k] for k in keys(weights))
+end
+
+function scalar_fitness(g::LinearGenotype.Creature, config)
+    scalar_fitness(g.fitness, config.selection.fitness_weights)
 end
 
 

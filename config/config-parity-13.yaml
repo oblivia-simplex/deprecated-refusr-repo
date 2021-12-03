@@ -1,11 +1,11 @@
 experiment_duration: 5000000
 step_duration: 1
 preserve_population: true
-experiment: "12-bit-even-parity-no-xor"
+experiment: "13-bit-odd-parity"
 
 selection:
 
-  data: "./samples/12-bit-even-parity.csv"
+  data: "./samples/13-bit-odd-parity.csv"
   d_fitness: 4
   t_size: 6
   fitness_sharing: true
@@ -15,20 +15,20 @@ selection:
     dirichlet: 1000
     ingenuity: 300
     information: 200
-    parsimony: 0
+    parsimony: 50
 
 
 genotype:
   max_depth: 8
   min_len: 4
-  max_len: 1024
+  max_len: 800
   data_n: 11
   registers_n: 8
   output_reg: 1
-  max_steps: 1024
+  max_steps: 800
   mutation_rate: 0.1
   weight_crossover_points: true
-  ops: "nor nand | & ~ mov"
+  ops: "xor | & ~"
 
 population:
   size: [15, 15]

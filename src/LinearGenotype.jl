@@ -9,7 +9,6 @@ import JSON
 import Base.isequal
 
 using ..Ops
-using ..FF
 using ..Names
 using ..StructuredTextTemplate
 using ..Cockatrice.Evo
@@ -19,6 +18,16 @@ using ..Expressions
 const RegType = Bool
 const Exp = Expressions
 const mov = identity
+
+
+const Fitness = NamedTuple{
+    (:scalar, :dirichlet, :ingenuity, :information, :parsimony),
+    Tuple{Float64, Float64, Float64, Float64, Float64}
+}
+
+function NewFitness()
+    Fitness((-Inf, -Inf, -Inf, -Inf, -Inf))
+end
 
 
 
@@ -574,7 +583,7 @@ function evaluate_sequential(code; INPUT, config::NamedTuple, make_trace = true)
     (res, cat(tr..., dims = (3,)))
 end
 
-function FF.evaluate(g::Creature; INPUT, config::NamedTuple, make_trace = true)
+function evaluate(g::Creature; INPUT, config::NamedTuple, make_trace = true)
     if isnothing(g.effective_code)
         #g.effective_code = strip_introns(g.chromosome, [config.genotype.output_reg])
         g.effective_indices = get_effective_indices(g.chromosome, [1])
@@ -618,7 +627,7 @@ end
 
 
 # try just _parsimony TODO
-FF.parsimony(g::Creature) = stepped_parsimony(g::Creature, 50)
+parsimony(g::Creature) = stepped_parsimony(g::Creature, 50)
 
 
 ST_TRANS = [:& => "AND", :xor => "XOR", :| => "OR", :~ => "NOT"] |> Dict

@@ -4,7 +4,7 @@ preserve_population: true
 experiment: "Parity-11-sans-dirichlet"
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/parity-11.csv"
   d_fitness: 4
   t_size: 6

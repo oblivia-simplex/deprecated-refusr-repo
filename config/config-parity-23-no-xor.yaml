@@ -4,7 +4,7 @@ preserve_population: true
 experiment: "23-bit-even-parity-no-xor"
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/23-bit-even-parity.csv"
   d_fitness: 4
   t_size: 6

@@ -54,8 +54,7 @@ function launch(config_path)
         end
     end
 
-    fitness_function = FF.fit #Meta.parse("FF.$(config.selection.fitness_function)") |> eval
-    #@assert fitness_function isa Function
+    fitness_function = config.selection.fitness_function
 
     WORKERS = workers()
 

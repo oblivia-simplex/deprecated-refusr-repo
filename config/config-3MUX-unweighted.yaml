@@ -4,7 +4,7 @@ step_duration: 2
 preserve_population: true
 
 selection:
-  fitness_function: "fit"
+
   data: "./samples/3-MUX_meaty-inane-flush_2048.csv"
   d_fitness: 3
   t_size: 6

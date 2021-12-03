@@ -29,9 +29,9 @@ include("StructuredTextTemplate.jl")
 include("Expressions.jl")
 include("Sensitivity.jl")
 include("Names.jl")
+include("LinearGenotype.jl")
 include("FF.jl")
 include("TreeGenotype.jl")
-include("LinearGenotype.jl")
 include("step.jl")
 include("Z3Bridge.jl")
 include("Analysis.jl")
@@ -53,6 +53,13 @@ DEFAULT_CONFIG_FIELDS = [
     ["experiment"] => Names.rand_name(2),
     ["selection", "t_size"] => 6,
     ["selection", "lexical"] => true,
+    ["selection", "fitness_function"] => FF.fit,
+    ["selection", "fitness_weights"] => Dict([
+        "dirichlet" => 000,
+        "ingenuity" => 200,
+        "information" => 40,
+        "parsimony" => 00,
+    ]),
     ["logging", "dir"] => "$(ENV["HOME"])/logs/refusr/",
     ["genotype", "weight_crossover_points"] => true,
     ["genotype", "ops"] => "| & ~ mov",
@@ -104,6 +111,7 @@ stopping_condition(evo) =
 
 TRACERS = [
     (key = "objective", callback = objective_performance, rate = 1.00),
+    (key = "fitness_scalar", callback = g -> g.fitness.scalar, rate = 1.0),
     (key = "fitness_dirichlet", callback = g -> g.fitness.dirichlet, rate = 1.0),
     (key = "fitness_ingenuity", callback = g -> g.fitness.ingenuity, rate = 1.0),
     (key = "fitness_information", callback = g -> g.fitness.information, rate = 1.0),
@@ -115,7 +123,6 @@ TRACERS = [
     ),
     (key = "num_offspring", callback = g -> g.num_offspring, rate = 1.0),
     (key = "generation", callback = g -> g.generation, rate = 1.0),
-    (key = "likeness", callback = get_likeness, rate = 1.0),
 ]
 
 
@@ -123,6 +130,8 @@ TRACERS = [
 LOGGERS = [
     (key = "objective", reducer = maximum),
     (key = "objective", reducer = meanfinite),
+    (key = "fitness_scalar", reducer = maximum),
+    (key = "fitness_scalar", reducer = meanfinite),
     (key = "fitness_dirichlet", reducer = maximum),
     (key = "fitness_dirichlet", reducer = meanfinite),
     (key = "fitness_dirichlet", reducer = std),
@@ -139,7 +148,6 @@ LOGGERS = [
     (key = "num_offspring", reducer = maximum),
     (key = "num_offspring", reducer = Statistics.mean),
     (key = "generation", reducer = Statistics.mean),
-    (key = "likeness", reducer = meanfinite),
 ]
 
 pipinstall(package) = run(`$(PyCall.python) -m pip install $(package)`)
