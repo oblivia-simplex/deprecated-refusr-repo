@@ -1,0 +1,23 @@
+experiment_duration: 120
+
+selection:
+  fitness_function: "classify"
+  d_fitness: 3
+  t_size: 6
+
+genotype:
+  min_len: 5
+  max_len: 100
+  mutation_rate: 0.1
+
+population:
+  size: [40, 40]
+  toroidal: true
+  locality: 16
+  n_elites: 10
+  migration_rate: 0.5
+  migration_type: "elite"
+
+logging:
+  log_every: 5
+  save_every: 50

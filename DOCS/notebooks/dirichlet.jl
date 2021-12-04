@@ -1,0 +1,1 @@
+../../GP/refusr/notebooks/dirichlet.jl

@@ -1,0 +1,13 @@
+name = "Junta"
+uuid = "cddeebfc-85d0-449a-b46a-69f1e90da772"
+authors = ["acd "]
+version = "0.1.1"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+BitTools = "241b95ae-9817-4b36-a40a-0f608189f837"
+Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

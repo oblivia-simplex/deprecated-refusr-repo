@@ -1,0 +1,12 @@
+name = "BitTools"
+uuid = "241b95ae-9817-4b36-a40a-0f608189f837"
+authors = ["acd "]
+version = "0.1.0"
+
+[deps]
+Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+RandomNumbers = "e6cf234a-135c-5ec9-84dd-332b85af5143"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

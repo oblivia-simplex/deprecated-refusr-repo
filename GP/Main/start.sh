@@ -1,4 +1,8 @@
-#! /bin/sh
+#! /usr/bin/env bash
+
+SCRIPT_DIR="$( cd "$(dirname $(realpath "${BASH_SOURCE[0]}"))" &> /dev/null && pwd )"
+echo "[+] Entering directory $SCRIPT_DIR"
+cd "$SCRIPT_DIR"
 
 export GTK_PATH="/usr/lib/x86_64-linux-gnu/gtk-3.0:$PATH"
 export DASH_HOT_RELOAD=0
